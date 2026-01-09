@@ -1,16 +1,16 @@
 package main
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"go-tube/youtube"
-	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 )
 
@@ -18,37 +18,37 @@ var BotId string
 var Bot *discordgo.Session
 var debug = false
 
-func Start() {
+func Start() error {
 	botToken := os.Getenv("BOT_TOKEN")
 	if botToken == "" {
-		panic("Please fill the discord bot token")
+		return errors.New("BOT_TOKEN is not set")
 	}
-	Bot, err := discordgo.New("Bot " + botToken)
 
+	Bot, err := discordgo.New("Bot " + botToken)
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 
 	u, err := Bot.User("@me")
-
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 
 	BotId = u.ID
-
 	Bot.AddHandler(Handler)
 
 	err = Bot.Open()
-
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 
-	fmt.Println("Bot Started....")
+	if debug {
+		fmt.Println("Debug mode enabled")
+		youtube.Debug = true
+	}
+
+	fmt.Println("Bot started successfully")
+	return nil
 }
 
 func Handler(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -68,105 +68,97 @@ func Handler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		_, _ = s.ChannelMessageSendReply(m.ChannelID, "pong...", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
 	}
 
-	if cmd == "debug" {
-		debug = !debug
-		youtube.Debug = !youtube.Debug
-	}
-
 	if cmd == "play" || cmd == "p" {
-		query := strings.Join(args, " ")
 		if len(args) == 0 {
 			_, _ = s.ChannelMessageSendReply(m.ChannelID, fmt.Sprintf("type `%splay <url|title>`", prefix), &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
 			return
 		}
 
-		_m, _ := s.ChannelMessageSendReply(m.ChannelID, "```searching...```", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
-
-		if debug {
-			fmt.Println("Joining voice channel")
-		}
-		err := JoinAudio(m.GuildID, m.Author.ID, s)
-		if err != nil {
-			if err.Error() == "MISSING_VOICE_CHANNEL" {
-				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "please join voice channel first")
-			} else if err.Error() == "CONFLICT" {
-				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, fmt.Sprintf("player is used at another voice channel\nto force, type %sdc first", prefix))
-			} else {
-				fmt.Printf("Error: %s\n", err.Error())
-				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, try again\nmake sure you join a voice channel```")
-			}
+		// Check if user is in a voice channel
+		vc, err := s.State.VoiceState(m.GuildID, m.Author.ID)
+		if err != nil || vc == nil {
+			_, _ = s.ChannelMessageSendReply(m.ChannelID, "please join a voice channel first", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
 			return
 		}
 
-		if debug {
-			fmt.Println("Parsing audio url")
+		// Check if bot is already in another voice channel
+		if Channels[m.GuildID] != nil && Channels[m.GuildID].ChannelID != vc.ChannelID {
+			_, _ = s.ChannelMessageSendReply(m.ChannelID, fmt.Sprintf("bot is already in another voice channel\nto force, type `%sdc` first", prefix), &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
+			return
 		}
 
+		_m, _ := s.ChannelMessageSendReply(m.ChannelID, "searching...", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
+
 		var q *url.URL
+		query := strings.Join(args, " ")
 		if query[:4] == "http" {
 			q, err = url.ParseRequestURI(query)
 			if err != nil {
 				fmt.Printf("Error: %s\n", err.Error())
-				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, try again```")
+				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
 				return
 			}
 		}
+
 		if query[:4] == "http" && q.Path == "/playlist" {
+			if debug {
+				fmt.Println("Parsing playlist")
+			}
+
 			lists, err := youtube.ParsePlaylist(q.String())
 			if err != nil {
 				if err.Error() == "playlist_not_found" {
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```playlist not found```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "playlist not found")
 				} else if err.Error() == "invalid_playlist_url" {
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```invalid playlist url```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "invalid playlist url")
 				} else {
 					fmt.Printf("Error: %s\n", err.Error())
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, try again```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
 				}
 				return
 			}
 
 			for _, v := range lists {
-				res, err := youtube.Play(v)
+				res, err := youtube.GetVideoInfo(v)
 				if err != nil {
 					fmt.Printf("Error: %s\n", err.Error())
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, try again```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
 					return
 				}
 
 				if debug {
-					fmt.Printf("Playing audio: %s\n", res.URL)
+					fmt.Printf("Playing audio: %s\n", res.YouTubeURL)
 				}
-				_, err = AddQueue(m.GuildID, res.Title, res.URL, res.Bitrate)
+				_, err = AddQueue(m.GuildID, res, s, m.Author.ID)
 				if err != nil {
 					fmt.Printf("Error: %s\n", err.Error())
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, try again```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
 					return
 				}
 			}
-
 		} else {
-			res, err := youtube.Play(query)
+			res, err := youtube.SearchVideo(query)
 			if err != nil {
 				if err.Error() == "ivalid_url" {
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, maybe invalid url```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, maybe invalid url")
 				} else {
 					fmt.Printf("Error: %s\n", err.Error())
-					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "```server error, try again```")
+					_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
 				}
 				return
 			}
 
 			if debug {
-				fmt.Printf("Playing audio: %s\n", res.URL)
+				fmt.Printf("Playing %s\n", res.Title)
 			}
-			_, err = AddQueue(m.GuildID, res.Title, res.URL, res.Bitrate)
+			_, err = AddQueue(m.GuildID, res, s, m.Author.ID)
 			if err != nil {
 				fmt.Printf("Error: %s\n", err.Error())
-				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "``````server error, try again``````")
+				_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
 				return
 			}
 		}
-		_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, fmt.Sprintf("```Queue:\n%s```", strings.Join(listQueue(m.GuildID), "\n")))
+		_, _ = s.ChannelMessageEdit(m.ChannelID, _m.ID, fmt.Sprintf("Queue:\n%s", strings.Join(listQueue(m.GuildID), "\n")))
 	}
 
 	if cmd == "skip" || cmd == "s" {
@@ -180,25 +172,37 @@ func Handler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	if cmd == "queue" || cmd == "q" {
-		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("```Queue:\n%s```", strings.Join(listQueue(m.GuildID), "\n")))
+		_, _ = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Queue:\n%s", strings.Join(listQueue(m.GuildID), "\n")))
 	}
 }
 
 func main() {
-	godotenv.Load()
-	fmt.Printf("Starting... | [%s...]\n", os.Getenv("BOT_TOKEN")[:3])
-	Start()
+	fmt.Println("Starting...")
+	fmt.Println("Loading environment variables...")
 
-	r := mux.NewRouter()
-	r.StrictSlash(true)
-	r.HandleFunc(`/`, func(w http.ResponseWriter, r *http.Request) { w.Write(bytes.NewBufferString("hello").Bytes()) })
-
-	http_port := os.Getenv(`PORT`)
-	if http_port == `` {
-		http_port = "8080"
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("Error loading environment variables:", err)
+		return
 	}
 
-	fmt.Println(`Listening on http://localhost:` + http_port)
-	http.ListenAndServe(`0.0.0.0:`+http_port, r)
-	// <-make(chan struct{})
+	fmt.Println("Environment variables loaded successfully")
+	debug = os.Getenv("DEBUG") == "true"
+
+	fmt.Printf("Bot token: %s...\n", os.Getenv("BOT_TOKEN")[:5])
+	if err := Start(); err != nil {
+		fmt.Println("Error starting bot:", err)
+		return
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+
+	fmt.Println("Shutting down...")
+	for gid := range Channels {
+		Clear(gid)
+	}
+	if Bot != nil {
+		Bot.Close()
+	}
 }

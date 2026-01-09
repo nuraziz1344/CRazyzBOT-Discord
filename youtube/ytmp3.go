@@ -2,92 +2,56 @@ package youtube
 
 import (
 	"errors"
-	"fmt"
 	"io"
-	"net/http"
-	"net/url"
+	"os"
+	"os/exec"
 
 	"github.com/tidwall/gjson"
 )
 
-var Debug = false
+var Debug = os.Getenv("DEBUG") == "true"
 
-func YtMp3(q string) (T string, U string, E error) {
-	form := &url.Values{}
-	form.Set("u", q)
-	form.Set("c", "ID")
-
-	req, err := http.PostForm("https://ytpp3.com/newp", *form)
+func GetAudioURL(youtubeURL string) (string, error) {
+	// get audio url from yt-dlp with JSON output
+	infoCmd := exec.Command("yt-dlp", "-f", "bestaudio[ext=m4a]/bestaudio/best", "--dump-json", youtubeURL)
+	output, err := infoCmd.Output()
 	if err != nil {
-		return "", "", err
+		return "", errors.New("failed_to_get_audio_url")
 	}
 
-	res, err := io.ReadAll(req.Body)
-	req.Body.Close()
+	jsonStr := string(output)
+	// When using -f with --dump-json, yt-dlp returns the selected format directly
+	audioURL := gjson.Get(jsonStr, "url").String()
+	if audioURL == "" {
+		return "", errors.New("audio_url_not_found")
+	}
+	return audioURL, nil
+}
+
+func StartFFmpeg(videoURL string) (*exec.Cmd, io.ReadCloser, error) {
+	cmd := exec.Command(
+		"ffmpeg",
+		"-re", // real-time pacing
+		"-hide_banner",
+		"-loglevel", "panic",
+		"-reconnect", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "5",
+		"-i", videoURL,
+		"-f", "s16le",
+		"-ar", "48000",
+		"-ac", "2",
+		"pipe:1",
+	)
+
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", "", err
+		return nil, nil, err
 	}
 
-	if Debug {
-		fmt.Println(string(res))
-	}
-	mp3Url := gjson.GetBytes(res, "data.mp3").Str
-	title := gjson.GetBytes(res, "data.title").Str
-
-	if mp3Url == "" {
-		mp3Url = gjson.GetBytes(res, "data.mp3_cdn").Str
-		mp3UrlCache := ""
-		if mp3Url == "" && gjson.GetBytes(res, "data.mp3_cdn").Type.String() == "JSON" {
-			for _, v := range gjson.GetBytes(res, "data.mp3_cdn").Array() {
-				mp3UrlCache = v.Get("mp3_cdn").Str
-				if mp3UrlCache == "" {
-					mp3UrlCache = v.Get("mp3_url").Str
-				}
-				if Debug {
-					fmt.Printf("format:%s | url:%s\n", v.Get("mp3_format").Str, v.Get("mp3_url").Str)
-				}
-				if mp3UrlCache != "" && v.Get("mp3_format").Str == "mp3" {
-					if Debug {
-						fmt.Println("breaking")
-					}
-					mp3Url = mp3UrlCache
-					break
-				}
-			}
-			if mp3Url == "" {
-				mp3Url = mp3UrlCache
-			}
-		} else if mp3Url == "" && gjson.GetBytes(res, "data.mp3").Type.String() == "JSON" {
-			for _, v := range gjson.GetBytes(res, "data.mp3").Array() {
-				mp3UrlCache = v.Get("mp3_cdn").Str
-				if mp3UrlCache == "" {
-					mp3UrlCache = v.Get("mp3_url").Str
-				}
-				if Debug {
-					fmt.Printf("format:%s | url:%s\n", v.Get("mp3_format").Str, v.Get("mp3_url").Str)
-				}
-				if mp3UrlCache != "" && v.Get("mp3_format").Str == "mp3" {
-					if Debug {
-						fmt.Println("breaking")
-					}
-					mp3Url = mp3UrlCache
-					break
-				}
-			}
-			if mp3Url == "" {
-				mp3Url = mp3UrlCache
-			}
-		}
-	}
-	if mp3Url == "" {
-		if gjson.GetBytes(res, "status").Int() == 0 {
-			return "", "", errors.New("ivalid_url")
-		}
-		fmt.Println(string(res))
-		return "", "", errors.New("failed fetch ytmp3")
-	} else if mp3Url[:4] != "http" {
-		mp3Url = "https://ytpp3.com" + mp3Url
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
 	}
 
-	return title, mp3Url, nil
+	return cmd, stdout, nil
 }

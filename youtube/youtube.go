@@ -11,49 +11,85 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-type PlayResponse struct {
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Bitrate int    `json:"bitrate"`
+type VideoInfo struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Thumbnail  string `json:"thumbnail"`
+	YouTubeURL string `json:"youtube_url"`
 }
 
-func Search(keyword string) (string, error) {
-	var ytApikey = os.Getenv("YT_APIKEY")
-	_url := fmt.Sprintf("https://youtube.googleapis.com/youtube/v3/search?q=%s&type=video&key=%s", url.QueryEscape(keyword), ytApikey)
-	req, err := http.Get(_url)
+func GetVideoInfo(videoURL string) (*VideoInfo, error) {
+	parsedUrl, err := url.Parse(videoURL)
 	if err != nil {
-		return "", err
+		return &VideoInfo{}, err
+	}
+
+	vId := ""
+	switch parsedUrl.Host {
+	case "youtu.be":
+		vId = parsedUrl.Path[1:]
+	case "youtube.com":
+		vId = parsedUrl.Query().Get("v")
+	default:
+		return &VideoInfo{}, errors.New("invalid_video_url")
+	}
+
+	if vId == "" {
+		return &VideoInfo{}, errors.New("invalid_video_url")
+	}
+
+	reqUrl := fmt.Sprintf("https://youtube.googleapis.com/youtube/v3/videos?part=snippet&id=%s&key=%s", vId, os.Getenv("YT_APIKEY"))
+	req, err := http.Get(reqUrl)
+	if err != nil {
+		return &VideoInfo{}, err
 	}
 
 	defer req.Body.Close()
 	res, err := io.ReadAll(req.Body)
 	if err != nil {
-		return "", err
+		return &VideoInfo{}, err
 	}
 
 	data := string(res)
+	result := &VideoInfo{
+		ID:         vId,
+		Title:      gjson.Get(data, "items.0.snippet.title").Str,
+		Thumbnail:  fmt.Sprintf("https://i.ytimg.com/vi/%s/default.jpg", vId),
+		YouTubeURL: videoURL,
+	}
 
-	vId := gjson.Get(data, "items.1.id.videoId")
-
-	return "https://youtu.be/" + vId.Str, nil
+	return result, nil
 }
 
-func Play(_url string) (*PlayResponse, error) {
-	if _url[:4] != "http" {
-		ytUrl, err := Search(_url)
-		if err != nil {
-			return &PlayResponse{}, err
-		}
-		_url = ytUrl
+func SearchVideo(keyword string) (*VideoInfo, error) {
+	var ytApikey = os.Getenv("YT_APIKEY")
+
+	if keyword[:4] == "http" {
+		return GetVideoInfo(keyword)
 	}
 
-	title, url, err := YtMp3(_url)
+	// keyword = keyword + " song"
+	reqUrl := fmt.Sprintf("https://youtube.googleapis.com/youtube/v3/search?part=snippet&type=video&q=%s&key=%s", url.QueryEscape(keyword), ytApikey)
+	req, err := http.Get(reqUrl)
 	if err != nil {
-		return &PlayResponse{}, err
-	} else if url == "" {
-		return &PlayResponse{}, errors.New("ytmp3_failed")
+		return &VideoInfo{}, err
 	}
 
-	response := &PlayResponse{Title: title, URL: url, Bitrate: 128}
-	return response, nil
+	defer req.Body.Close()
+	res, err := io.ReadAll(req.Body)
+	if err != nil {
+		return &VideoInfo{}, err
+	}
+
+	data := string(res)
+	// os.WriteFile("data.json", []byte(data), 0644)
+	vId := gjson.Get(data, "items.0.id.videoId").String()
+	result := &VideoInfo{
+		ID:         vId,
+		Title:      gjson.Get(data, "items.0.snippet.title").Str,
+		Thumbnail:  fmt.Sprintf("https://i.ytimg.com/vi/%s/default.jpg", vId),
+		YouTubeURL: fmt.Sprintf("https://youtu.be/%s", vId),
+	}
+
+	return result, nil
 }
