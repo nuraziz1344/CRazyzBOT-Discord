@@ -33,5 +33,4 @@ go.work
 Thumbs.db
 
 # Build artifacts
-bot
-go-tube
+./bin
