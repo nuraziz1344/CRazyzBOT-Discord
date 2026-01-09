@@ -39,8 +39,8 @@ A feature-rich Discord music bot written in Go, supporting YouTube video playbac
 
 ```bash
 # Clone the repository
-git clone https://github.com/nuraziz0404/go-discord-music.git
-cd go-discord-music
+git clone https://github.com/nuraziz1344/CRazyzBOT-Discord
+cd CRazyzBOT-Discord
 
 # Install dependencies
 go mod download
