@@ -3,13 +3,12 @@ package youtube
 import (
 	"errors"
 	"io"
-	"os"
 	"os/exec"
 
 	"github.com/tidwall/gjson"
 )
 
-var Debug = os.Getenv("DEBUG") == "true"
+var Debug = false
 
 func GetAudioURL(youtubeURL string) (string, error) {
 	// get audio url from yt-dlp with JSON output

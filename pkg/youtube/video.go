@@ -28,7 +28,7 @@ func GetVideoInfo(videoURL string) (*VideoInfo, error) {
 	switch parsedUrl.Host {
 	case "youtu.be":
 		vId = parsedUrl.Path[1:]
-	case "youtube.com":
+	case "youtube.com", "www.youtube.com":
 		vId = parsedUrl.Query().Get("v")
 	default:
 		return &VideoInfo{}, errors.New("invalid_video_url")
@@ -64,11 +64,10 @@ func GetVideoInfo(videoURL string) (*VideoInfo, error) {
 func SearchVideo(keyword string) (*VideoInfo, error) {
 	var ytApikey = os.Getenv("YT_APIKEY")
 
-	if keyword[:4] == "http" {
+	if len(keyword) >= 4 && keyword[:4] == "http" {
 		return GetVideoInfo(keyword)
 	}
 
-	// keyword = keyword + " song"
 	reqUrl := fmt.Sprintf("https://youtube.googleapis.com/youtube/v3/search?part=snippet&type=video&q=%s&key=%s", url.QueryEscape(keyword), ytApikey)
 	req, err := http.Get(reqUrl)
 	if err != nil {
@@ -82,7 +81,6 @@ func SearchVideo(keyword string) (*VideoInfo, error) {
 	}
 
 	data := string(res)
-	// os.WriteFile("data.json", []byte(data), 0644)
 	vId := gjson.Get(data, "items.0.id.videoId").String()
 	result := &VideoInfo{
 		ID:         vId,
