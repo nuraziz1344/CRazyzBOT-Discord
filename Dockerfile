@@ -15,6 +15,5 @@ RUN apk add --no-cache ffmpeg python3 py3-pip && \
     pip3 install --no-cache-dir yt-dlp --break-system-packages
 
 COPY --from=builder /app/bot /app/bot
-COPY .env /app/.env
 
 CMD ["/app/bot"]
