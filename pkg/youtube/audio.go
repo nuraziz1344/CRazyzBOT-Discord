@@ -15,14 +15,14 @@ func GetAudioURL(youtubeURL string) (string, error) {
 	infoCmd := exec.Command("yt-dlp", "-f", "bestaudio[ext=m4a]/bestaudio/best", "--dump-json", youtubeURL)
 	output, err := infoCmd.Output()
 	if err != nil {
-		return "", errors.New("failed_to_get_audio_url")
+		return "", err
 	}
 
 	jsonStr := string(output)
 	// When using -f with --dump-json, yt-dlp returns the selected format directly
 	audioURL := gjson.Get(jsonStr, "url").String()
 	if audioURL == "" {
-		return "", errors.New("audio_url_not_found")
+		return "", errors.New("YT-DLP: unable to find audio URL")
 	}
 	return audioURL, nil
 }
