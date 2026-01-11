@@ -35,7 +35,7 @@ A feature-rich Discord music bot written in Go, supporting YouTube video playbac
 
 ## Installation
 
-### Using Make (Recommended)
+### Run
 
 ```bash
 # Clone the repository
@@ -49,7 +49,7 @@ go mod download
 go run ./cmd/bot
 ```
 
-### Manual Build
+### Build
 
 ```bash
 # Build the bot
