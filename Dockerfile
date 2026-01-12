@@ -1,9 +1,10 @@
 FROM golang:alpine AS builder
 
+RUN apk add --no-cache gcc libstdc++ musl-dev pkgconfig opus-dev opusfile-dev
+
 WORKDIR /app
 COPY . /app
 
-RUN apk add --no-cache gcc libstdc++ musl-dev pkgconfig opus-dev opusfile-dev
 RUN go mod download
 RUN go build -o bot ./cmd/bot
 

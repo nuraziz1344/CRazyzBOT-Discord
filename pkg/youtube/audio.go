@@ -30,8 +30,11 @@ func GetAudioURL(youtubeURL string) (string, error) {
 	infoCmd := exec.Command("yt-dlp", args...)
 	output, err := infoCmd.Output()
 	if err != nil {
-		if Debug && len(output) > 0 {
-			fmt.Printf("YT-DLP output: %s\n", string(output))
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			fmt.Printf("YT-DLP error: %s\n", string(exitErr.Stderr))
+		}
+		if Debug {
+			fmt.Printf("Command: yt-dlp %v\n", args)
 		}
 		return "", err
 	}
