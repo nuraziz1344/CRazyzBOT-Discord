@@ -16,7 +16,7 @@ func GetAudioURL(youtubeURL string) (string, error) {
 	// get audio url from yt-dlp with JSON output
 	// Fall back to best format with audio if no audio-only stream available
 	args := []string{
-		"-f", "bestaudio[protocol=https]/bestaudio[protocol=http]/bestaudio/best[acodec!=none]/best",
+		"-f", "bestaudio/best[acodec!=none]/91/92/93/best",
 		"--dump-json",
 		"--no-warnings",
 		"--geo-bypass",
@@ -46,19 +46,26 @@ func GetAudioURL(youtubeURL string) (string, error) {
 	if audioURL == "" {
 		return "", errors.New("YT-DLP: unable to find audio URL")
 	}
+
+	// if audioUrl ends with ".m3u8"
+	if Debug && len(audioURL) >= 5 && audioURL[len(audioURL)-5:] == ".m3u8" {
+		fmt.Println("Warning: audio URL is an m3u8 stream, which may not be supported")
+	}
+	
 	return audioURL, nil
 }
 
 func StartFFmpeg(videoURL string) (*exec.Cmd, io.ReadCloser, error) {
 	cmd := exec.Command(
 		"ffmpeg",
-		"-re", // real-time pacing
 		"-hide_banner",
-		"-loglevel", "panic",
+		"-loglevel", "error",
+		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
 		"-reconnect", "1",
 		"-reconnect_streamed", "1",
 		"-reconnect_delay_max", "5",
 		"-i", videoURL,
+		"-vn", // no video
 		"-f", "s16le",
 		"-ar", "48000",
 		"-ac", "2",
