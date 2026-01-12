@@ -30,7 +30,11 @@ func Play(s *discordgo.Session, m *discordgo.MessageCreate, args []string, prefi
 		return
 	}
 
-	_m, _ := s.ChannelMessageSendReply(m.ChannelID, "searching...", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
+	_m, err := s.ChannelMessageSendReply(m.ChannelID, "searching...", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
+	if err != nil {
+		fmt.Printf("Error: %s\n", err.Error())
+		return
+	}
 
 	var q *url.URL
 	query := strings.Join(args, " ")
