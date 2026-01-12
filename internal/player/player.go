@@ -62,11 +62,7 @@ func StartPlayer(gid string) {
 		}
 
 		Channels[gid].currentCmd = cmd
-		defer func() {
-			if cmd.Process != nil {
-				cmd.Process.Kill()
-			}
-		}()
+		defer Channels[gid].currentCmd.Kill()
 
 		encoder, err := opus.NewEncoder(sampleRate, channels, opus.Application(opus.AppAudio))
 		if err != nil {
@@ -124,8 +120,8 @@ func StartPlayer(gid string) {
 
 // Kill method for exec.Cmd to satisfy interface
 func (c *Channel) Kill() error {
-	if c.currentCmd != nil && c.currentCmd.Process != nil {
-		return c.currentCmd.Process.Kill()
+	if c.currentCmd != nil {
+		return c.currentCmd.Kill()
 	}
 	return nil
 }

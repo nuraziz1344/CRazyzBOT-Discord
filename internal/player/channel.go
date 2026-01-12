@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"go-tube/pkg/youtube"
-	"os/exec"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -17,7 +16,7 @@ type Channel struct {
 	isRunning  bool
 	session    *discordgo.Session
 	userID     string
-	currentCmd *exec.Cmd
+	currentCmd *youtube.PipelineCmd
 }
 
 var Channels = make(map[string]*Channel)
