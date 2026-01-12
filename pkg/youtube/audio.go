@@ -52,14 +52,13 @@ func GetAudioURL(youtubeURL string) (string, error) {
 func StartFFmpeg(videoURL string) (*exec.Cmd, io.ReadCloser, error) {
 	cmd := exec.Command(
 		"ffmpeg",
+		"-re", // real-time pacing
 		"-hide_banner",
 		"-loglevel", "panic",
 		"-reconnect", "1",
 		"-reconnect_streamed", "1",
 		"-reconnect_delay_max", "5",
-		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
 		"-i", videoURL,
-		"-vn", // ignore video, audio only
 		"-f", "s16le",
 		"-ar", "48000",
 		"-ac", "2",
