@@ -51,21 +51,12 @@ func StartPlayer(gid string) {
 			fmt.Printf("Playing: %s\n", queueItem.Title)
 		}
 
-		audioUrl, err := youtube.GetAudioURL(queueItem.YouTubeURL)
+		cmd, pcm, err := youtube.GetAudioStream(queueItem.YouTubeURL)
 		if err != nil {
-			fmt.Printf("Error getting audio URL: %s\n", err.Error())
+			fmt.Printf("Error getting audio stream: %s\n", err.Error())
 			if Debug {
 				fmt.Println(queueItem.YouTubeURL)
 			}
-
-			Channels[gid].queue = Channels[gid].queue[1:]
-			continue
-		}
-
-		cmd, pcm, err := youtube.StartFFmpeg(audioUrl, queueItem.YouTubeURL)
-		if err != nil {
-			fmt.Printf("Error starting ffmpeg: %s\n", err.Error())
-			fmt.Println(audioUrl)
 			Channels[gid].queue = Channels[gid].queue[1:]
 			continue
 		}
@@ -98,7 +89,6 @@ func StartPlayer(gid string) {
 				elapsed := time.Since(startTime)
 				if Debug && elapsed < 10*time.Second {
 					fmt.Printf("Player finished too fast (%v) - possible stream error\n", elapsed)
-					fmt.Println(audioUrl)
 				} else if Debug {
 					fmt.Println("Player finished")
 				}
