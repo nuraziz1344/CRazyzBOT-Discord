@@ -2,6 +2,7 @@ package youtube
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 
@@ -14,18 +15,24 @@ var CookieFile = ""
 func GetAudioURL(youtubeURL string) (string, error) {
 	// get audio url from yt-dlp with JSON output
 	args := []string{
-		"-f", "bestaudio[ext=m4a]/bestaudio/best",
+		"-f", "bestaudio[protocol=https]/bestaudio[protocol=http]/bestaudio[ext=m4a]/bestaudio",
 		"--dump-json",
 		"--no-warnings",
 		"--geo-bypass",
 	}
 	if CookieFile != "" {
+		if Debug {
+			fmt.Printf("Using cookie file: %s\n", CookieFile)
+		}
 		args = append(args, "--cookies", CookieFile)
 	}
 	args = append(args, youtubeURL)
 	infoCmd := exec.Command("yt-dlp", args...)
 	output, err := infoCmd.Output()
 	if err != nil {
+		if Debug && len(output) > 0 {
+			fmt.Printf("YT-DLP output: %s\n", string(output))
+		}
 		return "", err
 	}
 

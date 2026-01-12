@@ -54,6 +54,10 @@ func StartPlayer(gid string) {
 		audioUrl, err := youtube.GetAudioURL(queueItem.YouTubeURL)
 		if err != nil {
 			fmt.Printf("Error getting audio URL: %s\n", err.Error())
+			if Debug {
+				fmt.Println(queueItem.YouTubeURL)
+			}
+
 			Channels[gid].queue = Channels[gid].queue[1:]
 			continue
 		}
@@ -92,7 +96,7 @@ func StartPlayer(gid string) {
 		for range ticker.C {
 			if err := binary.Read(reader, binary.LittleEndian, pcmBuf); err != nil {
 				elapsed := time.Since(startTime)
-				if elapsed < 2*time.Second {
+				if Debug && elapsed < 10*time.Second {
 					fmt.Printf("Player finished too fast (%v) - possible stream error\n", elapsed)
 					fmt.Println(audioUrl)
 				} else if Debug {
