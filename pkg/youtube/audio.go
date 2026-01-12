@@ -11,6 +11,7 @@ import (
 
 var Debug = false
 var CookieFile = ""
+var UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 func GetAudioURL(youtubeURL string) (string, error) {
 	// get audio url from yt-dlp with JSON output
@@ -55,17 +56,19 @@ func GetAudioURL(youtubeURL string) (string, error) {
 	return audioURL, nil
 }
 
-func StartFFmpeg(videoURL string) (*exec.Cmd, io.ReadCloser, error) {
+func StartFFmpeg(videoURL string, referer string) (*exec.Cmd, io.ReadCloser, error) {
 	cmd := exec.Command(
 		"ffmpeg",
 		"-hide_banner",
 		"-loglevel", "error",
 		"-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+		"-user_agent", UserAgent,
+		"-headers", fmt.Sprintf("Referer: %s\r\nOrigin: https://www.youtube.com", referer),
 		"-reconnect", "1",
 		"-reconnect_streamed", "1",
 		"-reconnect_delay_max", "5",
 		"-i", videoURL,
-		"-vn", // no video
+		"-vn",
 		"-f", "s16le",
 		"-ar", "48000",
 		"-ac", "2",

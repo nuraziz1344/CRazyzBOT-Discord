@@ -62,7 +62,7 @@ func StartPlayer(gid string) {
 			continue
 		}
 
-		cmd, pcm, err := youtube.StartFFmpeg(audioUrl)
+		cmd, pcm, err := youtube.StartFFmpeg(audioUrl, queueItem.YouTubeURL)
 		if err != nil {
 			fmt.Printf("Error starting ffmpeg: %s\n", err.Error())
 			fmt.Println(audioUrl)
