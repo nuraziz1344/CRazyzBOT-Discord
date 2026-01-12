@@ -14,8 +14,9 @@ var CookieFile = ""
 
 func GetAudioURL(youtubeURL string) (string, error) {
 	// get audio url from yt-dlp with JSON output
+	// Fall back to best format with audio if no audio-only stream available
 	args := []string{
-		"-f", "bestaudio[protocol=https]/bestaudio[protocol=http]/bestaudio[ext=m4a]/bestaudio",
+		"-f", "bestaudio[protocol=https]/bestaudio[protocol=http]/bestaudio/best[acodec!=none]/best",
 		"--dump-json",
 		"--no-warnings",
 		"--geo-bypass",
