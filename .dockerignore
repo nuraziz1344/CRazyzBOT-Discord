@@ -35,3 +35,6 @@ Thumbs.db
 
 # Build artifacts
 ./bin
+
+# Youtube-dl cookies
+cookies.txt
