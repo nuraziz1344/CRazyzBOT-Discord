@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-tube/internal/bot"
 	"go-tube/internal/config"
+	"go-tube/pkg/youtube"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,6 +22,10 @@ func main() {
 
 	fmt.Println("Environment variables loaded successfully")
 	fmt.Printf("Bot token: %s...\n", cfg.BotToken[:5])
+
+	// Set youtube package config
+	youtube.Debug = cfg.Debug
+	youtube.CookieFile = cfg.CookieFile
 
 	discordBot, err := bot.New(cfg)
 	if err != nil {

@@ -9,10 +9,21 @@ import (
 )
 
 var Debug = false
+var CookieFile = ""
 
 func GetAudioURL(youtubeURL string) (string, error) {
 	// get audio url from yt-dlp with JSON output
-	infoCmd := exec.Command("yt-dlp", "-f", "bestaudio[ext=m4a]/bestaudio/best", "--dump-json", youtubeURL)
+	args := []string{
+		"-f", "bestaudio[ext=m4a]/bestaudio/best",
+		"--dump-json",
+		"--no-warnings",
+		"--geo-bypass",
+	}
+	if CookieFile != "" {
+		args = append(args, "--cookies", CookieFile)
+	}
+	args = append(args, youtubeURL)
+	infoCmd := exec.Command("yt-dlp", args...)
 	output, err := infoCmd.Output()
 	if err != nil {
 		return "", err
