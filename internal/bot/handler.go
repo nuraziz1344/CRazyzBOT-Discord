@@ -13,12 +13,38 @@ func (b *Bot) messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	args := strings.Split(m.Content, " ")
-	if len(args) == 0 || len(args[0]) == 0 || args[0][:1] != b.Config.Prefix {
+	content := m.Content
+	args := strings.Split(content, " ")
+	
+	// Check for mention at the start
+	mentionPrefix := "<@" + b.BotID + ">"
+	mentionPrefixNick := "<@!" + b.BotID + ">"
+	
+	if strings.HasPrefix(content, mentionPrefix) {
+		// Remove mention and parse remaining args
+		content = strings.TrimPrefix(content, mentionPrefix)
+		content = strings.TrimSpace(content)
+		args = strings.Split(content, " ")
+		if len(args) == 0 || args[0] == "" {
+			return
+		}
+	} else if strings.HasPrefix(content, mentionPrefixNick) {
+		// Handle nickname mention format
+		content = strings.TrimPrefix(content, mentionPrefixNick)
+		content = strings.TrimSpace(content)
+		args = strings.Split(content, " ")
+		if len(args) == 0 || args[0] == "" {
+			return
+		}
+	} else if len(args) == 0 || len(args[0]) == 0 || args[0][:1] != b.Config.Prefix {
+		// Check for prefix
 		return
+	} else {
+		// Remove prefix from command
+		args[0] = args[0][1:]
 	}
 
-	cmd := args[0][1:]
+	cmd := args[0]
 	args = args[1:]
 
 	switch cmd {

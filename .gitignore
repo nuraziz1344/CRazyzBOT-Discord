@@ -8,6 +8,7 @@ bin/
 
 # Test binary, built with `go test -c`
 *.test
+tests
 
 # Output of the go coverage tool
 *.out
@@ -34,3 +35,6 @@ Thumbs.db
 
 # Build artifacts
 ./bin
+
+# Youtube Cookies file
+cookies.txt

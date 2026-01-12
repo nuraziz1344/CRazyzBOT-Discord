@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	BotToken string
-	Prefix   string
-	YTAPIKey string
-	Debug    bool
+	BotToken   string
+	Prefix     string
+	YTAPIKey   string
+	Debug      bool
+	CookieFile string
 }
 
 func Load() (*Config, error) {
@@ -25,9 +26,10 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		BotToken: botToken,
-		Prefix:   os.Getenv("PREFIX"),
-		YTAPIKey: os.Getenv("YT_APIKEY"),
-		Debug:    os.Getenv("DEBUG") == "true",
+		BotToken:   botToken,
+		Prefix:     os.Getenv("PREFIX"),
+		YTAPIKey:   os.Getenv("YT_APIKEY"),
+		Debug:      os.Getenv("DEBUG") == "true",
+		CookieFile: os.Getenv("COOKIE_FILE"),
 	}, nil
 }

@@ -51,27 +51,18 @@ func StartPlayer(gid string) {
 			fmt.Printf("Playing: %s\n", queueItem.Title)
 		}
 
-		audioUrl, err := youtube.GetAudioURL(queueItem.YouTubeURL)
+		cmd, pcm, err := youtube.GetAudioStream(queueItem.YouTubeURL)
 		if err != nil {
-			fmt.Printf("Error getting audio URL: %s\n", err.Error())
-			Channels[gid].queue = Channels[gid].queue[1:]
-			continue
-		}
-
-		cmd, pcm, err := youtube.StartFFmpeg(audioUrl)
-		if err != nil {
-			fmt.Printf("Error starting ffmpeg: %s\n", err.Error())
-			fmt.Println(audioUrl)
+			fmt.Printf("Error getting audio stream: %s\n", err.Error())
+			if Debug {
+				fmt.Println(queueItem.YouTubeURL)
+			}
 			Channels[gid].queue = Channels[gid].queue[1:]
 			continue
 		}
 
 		Channels[gid].currentCmd = cmd
-		defer func() {
-			if cmd.Process != nil {
-				cmd.Process.Kill()
-			}
-		}()
+		defer Channels[gid].currentCmd.Kill()
 
 		encoder, err := opus.NewEncoder(sampleRate, channels, opus.Application(opus.AppAudio))
 		if err != nil {
@@ -87,11 +78,17 @@ func StartPlayer(gid string) {
 		ticker := time.NewTicker(20 * time.Millisecond)
 		defer ticker.Stop()
 
+		startTime := time.Now()
+
 		for range ticker.C {
 			if err := binary.Read(reader, binary.LittleEndian, pcmBuf); err != nil {
-				if Debug {
+				elapsed := time.Since(startTime)
+				if Debug && elapsed < 10*time.Second {
+					fmt.Printf("Player finished too fast (%v) - possible stream error\n", elapsed)
+				} else if Debug {
 					fmt.Println("Player finished")
 				}
+				
 				// Clean up and move to next item
 				if len(Channels[gid].queue) > 0 {
 					Channels[gid].queue = Channels[gid].queue[1:]
@@ -123,8 +120,8 @@ func StartPlayer(gid string) {
 
 // Kill method for exec.Cmd to satisfy interface
 func (c *Channel) Kill() error {
-	if c.currentCmd != nil && c.currentCmd.Process != nil {
-		return c.currentCmd.Process.Kill()
+	if c.currentCmd != nil {
+		return c.currentCmd.Kill()
 	}
 	return nil
 }

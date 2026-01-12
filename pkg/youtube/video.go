@@ -61,11 +61,25 @@ func GetVideoInfo(videoURL string) (*VideoInfo, error) {
 	return result, nil
 }
 
+func containsMusicKeyword(keyword string) bool {
+	musicKeywords := []string{"song", "music", "track", "audio", "tune", "melody", "band", "album", "dj", "remix"}
+	for _, mk := range musicKeywords {
+		if gjson.Get(keyword, mk).Exists() || url.QueryEscape(keyword) == mk {
+			return true
+		}
+	}
+	return false
+}
+
 func SearchVideo(keyword string) (*VideoInfo, error) {
 	var ytApikey = os.Getenv("YT_APIKEY")
 
 	if len(keyword) >= 4 && keyword[:4] == "http" {
 		return GetVideoInfo(keyword)
+	}
+
+	if !containsMusicKeyword(keyword) {
+		keyword += " song"
 	}
 
 	reqUrl := fmt.Sprintf("https://youtube.googleapis.com/youtube/v3/search?part=snippet&type=video&q=%s&key=%s", url.QueryEscape(keyword), ytApikey)
