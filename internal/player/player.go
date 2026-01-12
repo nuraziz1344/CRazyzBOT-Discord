@@ -87,11 +87,18 @@ func StartPlayer(gid string) {
 		ticker := time.NewTicker(20 * time.Millisecond)
 		defer ticker.Stop()
 
+		startTime := time.Now()
+
 		for range ticker.C {
 			if err := binary.Read(reader, binary.LittleEndian, pcmBuf); err != nil {
-				if Debug {
+				elapsed := time.Since(startTime)
+				if elapsed < 2*time.Second {
+					fmt.Printf("Player finished too fast (%v) - possible stream error\n", elapsed)
+					fmt.Println(audioUrl)
+				} else if Debug {
 					fmt.Println("Player finished")
 				}
+				
 				// Clean up and move to next item
 				if len(Channels[gid].queue) > 0 {
 					Channels[gid].queue = Channels[gid].queue[1:]
