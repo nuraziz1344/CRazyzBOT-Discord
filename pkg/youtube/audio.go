@@ -80,6 +80,10 @@ func startYtdlpPipedStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, erro
 		"-f", "bestaudio/best[acodec!=none]",
 		"--no-warnings",
 		"--geo-bypass",
+		"--referer", "https://www.youtube.com/",
+		"--user-agent", UserAgent,
+		"--sleep-requests", "3",
+		"--sleep-interval", "5",
 		"-o", "-", // output to stdout
 	}
 	if CookieFile != "" {
