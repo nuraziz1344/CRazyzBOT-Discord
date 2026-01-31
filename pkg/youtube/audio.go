@@ -12,7 +12,7 @@ import (
 
 var Debug = false
 var CookieFile = ""
-var UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+var UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 // GetAudioStream fetches the audio URL from yt-dlp and starts FFmpeg to stream it.
 // Returns the FFmpeg command and stdout pipe for reading PCM audio.
@@ -24,6 +24,10 @@ func GetAudioStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
 		"--dump-json",
 		"--no-warnings",
 		"--geo-bypass",
+		"--referer", "https://www.youtube.com/",
+		"--user-agent", UserAgent,
+		"--sleep-requests", "3",
+		"--sleep-interval", "5",
 	}
 	if CookieFile != "" {
 		if Debug {
