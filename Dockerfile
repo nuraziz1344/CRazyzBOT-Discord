@@ -16,5 +16,7 @@ RUN apk add --no-cache ffmpeg opus opusfile python3 py3-pip && \
     pip3 install --no-cache-dir yt-dlp --break-system-packages
 
 COPY --from=builder /app/bot /app/bot
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
-CMD ["/app/bot"]
+CMD ["/app/start.sh"]
