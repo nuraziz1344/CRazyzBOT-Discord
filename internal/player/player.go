@@ -2,6 +2,7 @@ package player
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"go-tube/pkg/youtube"
@@ -40,12 +41,12 @@ func StartPlayer(gid string) {
 		queueItem := Channels[gid].queue[0]
 
 		// Verify voice connection is still ready
-		if !Channels[gid].dgv.Ready {
-			fmt.Printf("Voice connection not ready, waiting...\n")
-			for !Channels[gid].dgv.Ready {
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
+		// if !Channels[gid].dgv.Ready {
+		// 	fmt.Printf("Voice connection not ready, waiting...\n")
+		// 	for !Channels[gid].dgv.Ready {
+		// 		time.Sleep(100 * time.Millisecond)
+		// 	}
+		// }
 
 		if Debug {
 			fmt.Printf("Playing: %s\n", queueItem.Title)
@@ -55,7 +56,7 @@ func StartPlayer(gid string) {
 		if err != nil {
 			fmt.Printf("Error getting audio stream: %s\n", err.Error())
 			if Debug {
-				fmt.Println(queueItem.YouTubeURL)
+				fmt.Println("URL: ", queueItem.YouTubeURL)
 			}
 			Channels[gid].queue = Channels[gid].queue[1:]
 			continue
@@ -88,14 +89,15 @@ func StartPlayer(gid string) {
 				} else if Debug {
 					fmt.Println("Player finished")
 				}
-				
+
 				// Clean up and move to next item
 				if len(Channels[gid].queue) > 0 {
 					Channels[gid].queue = Channels[gid].queue[1:]
 				}
 				if len(Channels[gid].queue) == 0 {
 					Channels[gid].isRunning = false
-					Channels[gid].dgv.Disconnect()
+					// Channels[gid].dgv.Disconnect()
+					Channels[gid].dgv.Disconnect(context.Background())
 				}
 				break
 			}
