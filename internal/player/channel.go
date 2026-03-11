@@ -1,6 +1,7 @@
 package player
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"go-tube/pkg/youtube"
@@ -37,7 +38,8 @@ func JoinVoice(gid string, uid string, s *discordgo.Session) error {
 	// If channel exists but is in a different voice channel, disconnect first
 	if Channels[gid] != nil && Channels[gid].ChannelID != vc.ChannelID {
 		if Channels[gid].dgv != nil {
-			Channels[gid].dgv.Disconnect()
+			// Channels[gid].dgv.Disconnect()
+			Channels[gid].dgv.Disconnect(context.Background())
 		}
 		Channels[gid].ChannelID = vc.ChannelID
 	}
@@ -62,14 +64,15 @@ func JoinVoice(gid string, uid string, s *discordgo.Session) error {
 
 	// Disconnect existing connection if it exists and is not ready
 	if Channels[gid].dgv != nil {
-		if !Channels[gid].dgv.Ready {
-			Channels[gid].dgv.Disconnect()
-			Channels[gid].dgv = nil
-		}
+		// if !Channels[gid].dgv.Ready {
+		Channels[gid].dgv.Disconnect(context.Background())
+		Channels[gid].dgv = nil
+		// }
 	}
 
 	// Join the voice channel
-	Channels[gid].dgv, err = s.ChannelVoiceJoin(gid, vc.ChannelID, false, true)
+	// Channels[gid].dgv, err = s.ChannelVoiceJoin(gid, vc.ChannelID, false, true)
+	Channels[gid].dgv, err = s.ChannelVoiceJoin(context.Background(), gid, vc.ChannelID, false, true)
 	if err != nil {
 		return err
 	}
@@ -79,19 +82,20 @@ func JoinVoice(gid string, uid string, s *discordgo.Session) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	for !Channels[gid].dgv.Ready {
-		select {
-		case <-timeout:
-			if Channels[gid].dgv != nil {
-				Channels[gid].dgv.Disconnect()
-			}
-			return errors.New("timeout waiting for voice connection to be ready")
-		case <-ticker.C:
-			if Channels[gid].dgv == nil {
-				return errors.New("voice connection was closed")
-			}
+	// for !Channels[gid].dgv.Ready {
+	select {
+	case <-timeout:
+		if Channels[gid].dgv != nil {
+			// Channels[gid].dgv.Disconnect()
+			Channels[gid].dgv.Disconnect(context.Background())
+		}
+		return errors.New("timeout waiting for voice connection to be ready")
+	case <-ticker.C:
+		if Channels[gid].dgv == nil {
+			return errors.New("voice connection was closed")
 		}
 	}
+	// }
 
 	return nil
 }
@@ -148,7 +152,8 @@ func Clear(gid string) {
 		Channels[gid].queue = []*youtube.VideoInfo{}
 		Channels[gid].isRunning = false
 		if Channels[gid].dgv != nil {
-			Channels[gid].dgv.Disconnect()
+			// Channels[gid].dgv.Disconnect()
+			Channels[gid].dgv.Disconnect(context.Background())
 		}
 	}
 }

@@ -26,10 +26,10 @@ func GetAudioStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
 		"-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
 		"--dump-json",
 		"--no-warnings",
-		"--geo-bypass",
-		"--referer", "https://www.youtube.com/",
-		"--user-agent", UserAgent,
-		"--extractor-args", "youtube:player_client=web,ios",
+		// "--geo-bypass",
+		// "--referer", "https://www.youtube.com/",
+		// "--user-agent", UserAgent,
+		// "--extractor-args", "youtube:player_client=web,ios",
 		"--sleep-requests", "3",
 		"--sleep-interval", "5",
 	}
@@ -56,7 +56,7 @@ func GetAudioStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
 			fmt.Printf("YT-DLP error: %s\n", string(exitErr.Stderr))
 		}
 		if Debug {
-			fmt.Printf("Command: yt-dlp %v\n", args)
+			fmt.Printf("Command: yt-dlp %s\n", strings.Join(args, " "))
 		}
 		return nil, nil, err
 	}
@@ -92,10 +92,10 @@ func startYtdlpPipedStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, erro
 	ytArgs := []string{
 		"-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
 		"--no-warnings",
-		"--geo-bypass",
-		"--referer", "https://www.youtube.com/",
-		"--user-agent", UserAgent,
-		"--extractor-args", "youtube:player_client=web,ios",
+		// "--geo-bypass",
+		// "--referer", "https://www.youtube.com/",
+		// "--user-agent", UserAgent,
+		// "--extractor-args", "youtube:player_client=web,ios",
 		"--sleep-requests", "3",
 		"--sleep-interval", "5",
 		"-o", "-", // output to stdout
