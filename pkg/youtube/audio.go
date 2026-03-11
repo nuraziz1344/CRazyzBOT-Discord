@@ -159,6 +159,10 @@ func startYtdlpPipedStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, erro
 
 // startDirectFFmpeg starts FFmpeg for direct audio URLs (m4a, webm, etc.)
 func startDirectFFmpeg(audioURL string) (*PipelineCmd, io.ReadCloser, error) {
+	if Debug {
+		fmt.Println("FFMPEG: ", audioURL)
+	}
+
 	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
@@ -176,6 +180,9 @@ func startDirectFFmpeg(audioURL string) (*PipelineCmd, io.ReadCloser, error) {
 	cmd := exec.Command("ffmpeg", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		if Debug {
+			fmt.Println("FFMPEG stdout: ", err.Error())
+		}
 		return nil, nil, err
 	}
 
@@ -183,7 +190,14 @@ func startDirectFFmpeg(audioURL string) (*PipelineCmd, io.ReadCloser, error) {
 		cmd.Env = append(cmd.Env, "http_proxy="+Proxy, "https_proxy="+Proxy)
 	}
 
+	if Debug {
+		fmt.Println("FFMPEG command: ", strings.Join(cmd.Env, " "), strings.Join(cmd.Args, " "))
+	}
+
 	if err := cmd.Start(); err != nil {
+		if Debug {
+			fmt.Println("FFMPEG start: ", err.Error())
+		}
 		return nil, nil, err
 	}
 
