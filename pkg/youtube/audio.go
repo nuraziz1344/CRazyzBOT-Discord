@@ -10,31 +10,44 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var Debug = false
-var CookieFile = ""
-var UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+var (
+	Debug      = false
+	UserAgent  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	CookieFile = ""
+	Proxy      = ""
+)
 
 // GetAudioStream fetches the audio URL from yt-dlp and starts FFmpeg to stream it.
 // Returns the FFmpeg command and stdout pipe for reading PCM audio.
 func GetAudioStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
 	// get audio url from yt-dlp with JSON output
-	// Fall back to best format with audio if no audio-only stream available
+	// Multiple fallbacks for different regions/yt-dlp versions; extractor-args help when VPS gets different format list
 	args := []string{
-		"-f", "bestaudio/best[acodec!=none]",
+		"-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
 		"--dump-json",
 		"--no-warnings",
 		"--geo-bypass",
 		"--referer", "https://www.youtube.com/",
 		"--user-agent", UserAgent,
+		"--extractor-args", "youtube:player_client=web,ios",
 		"--sleep-requests", "3",
 		"--sleep-interval", "5",
 	}
+
 	if CookieFile != "" {
 		if Debug {
 			fmt.Printf("Using cookie file: %s\n", CookieFile)
 		}
 		args = append(args, "--cookies", CookieFile)
 	}
+
+	if Proxy != "" {
+		if Debug {
+			fmt.Printf("Using proxy: %s\n", Proxy)
+		}
+		args = append(args, "--proxy", Proxy)
+	}
+
 	args = append(args, youtubeURL)
 	infoCmd := exec.Command("yt-dlp", args...)
 	output, err := infoCmd.Output()
@@ -77,18 +90,25 @@ func GetAudioStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
 func startYtdlpPipedStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
 	// Build yt-dlp args to output audio to stdout
 	ytArgs := []string{
-		"-f", "bestaudio/best[acodec!=none]",
+		"-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
 		"--no-warnings",
 		"--geo-bypass",
 		"--referer", "https://www.youtube.com/",
 		"--user-agent", UserAgent,
+		"--extractor-args", "youtube:player_client=web,ios",
 		"--sleep-requests", "3",
 		"--sleep-interval", "5",
 		"-o", "-", // output to stdout
 	}
+
 	if CookieFile != "" {
 		ytArgs = append(ytArgs, "--cookies", CookieFile)
 	}
+
+	if Proxy != "" {
+		ytArgs = append(ytArgs, "--proxy", Proxy)
+	}
+
 	ytArgs = append(ytArgs, youtubeURL)
 
 	// FFmpeg reads from stdin and outputs PCM
