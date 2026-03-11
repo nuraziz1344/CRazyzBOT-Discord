@@ -13,6 +13,7 @@ type Config struct {
 	YTAPIKey   string
 	Debug      bool
 	CookieFile string
+	Proxy      string
 }
 
 func Load() (*Config, error) {
@@ -31,5 +32,6 @@ func Load() (*Config, error) {
 		YTAPIKey:   os.Getenv("YT_APIKEY"),
 		Debug:      os.Getenv("DEBUG") == "true",
 		CookieFile: os.Getenv("COOKIE_FILE"),
+		Proxy:      os.Getenv("PROXY"),
 	}, nil
 }

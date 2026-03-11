@@ -26,6 +26,7 @@ func main() {
 	// Set youtube package config
 	youtube.Debug = cfg.Debug
 	youtube.CookieFile = cfg.CookieFile
+	youtube.Proxy = cfg.Proxy
 
 	discordBot, err := bot.New(cfg)
 	if err != nil {
