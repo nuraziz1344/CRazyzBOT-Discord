@@ -201,6 +201,10 @@ func startDirectFFmpeg(audioURL string) (*PipelineCmd, io.ReadCloser, error) {
 		return nil, nil, err
 	}
 
+	if Debug {
+		fmt.Println("FFMPEG started")
+	}
+
 	wrapper := &PipelineCmd{
 		ffmpeg: cmd,
 	}
