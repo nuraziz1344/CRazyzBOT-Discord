@@ -179,6 +179,10 @@ func startDirectFFmpeg(audioURL string) (*PipelineCmd, io.ReadCloser, error) {
 		return nil, nil, err
 	}
 
+	if Proxy != "" {
+		cmd.Env = append(cmd.Env, "http_proxy="+Proxy, "https_proxy="+Proxy)
+	}
+
 	if err := cmd.Start(); err != nil {
 		return nil, nil, err
 	}
