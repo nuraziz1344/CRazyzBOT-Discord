@@ -1,13 +1,17 @@
 package youtube
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os/exec"
+	"regexp"
 	"strings"
-
-	"github.com/tidwall/gjson"
+	"time"
 )
 
 var (
@@ -17,144 +21,110 @@ var (
 	Proxy      = ""
 )
 
-// GetAudioStream fetches the audio URL from yt-dlp and starts FFmpeg to stream it.
+type dlsrvResponse struct {
+	URL      string `json:"url"`
+	Filename string `json:"filename"`
+	Status   string `json:"status"`
+}
+
+// GetAudioStream resolves a YouTube audio URL through a scraper endpoint and starts FFmpeg.
 // Returns the FFmpeg command and stdout pipe for reading PCM audio.
 func GetAudioStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
-	// get audio url from yt-dlp with JSON output
-	// Multiple fallbacks for different regions/yt-dlp versions; extractor-args help when VPS gets different format list
-	args := []string{
-		"-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
-		"--dump-json",
-		"--no-warnings",
-		// "--geo-bypass",
-		// "--referer", "https://www.youtube.com/",
-		// "--user-agent", UserAgent,
-		// "--extractor-args", "youtube:player_client=web,ios",
-		"--sleep-requests", "3",
-		"--sleep-interval", "5",
-	}
-
-	if CookieFile != "" {
-		if Debug {
-			fmt.Printf("Using cookie file: %s\n", CookieFile)
-		}
-		args = append(args, "--cookies", CookieFile)
-	}
-
-	if Proxy != "" {
-		if Debug {
-			fmt.Printf("Using proxy: %s\n", Proxy)
-		}
-		args = append(args, "--proxy", Proxy)
-	}
-
-	args = append(args, youtubeURL)
-	infoCmd := exec.Command("yt-dlp", args...)
-	output, err := infoCmd.Output()
+	audioURL, err := resolveYouTubeAudioURL(youtubeURL)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Printf("YT-DLP error: %s\n", string(exitErr.Stderr))
-		}
-		if Debug {
-			fmt.Printf("Command: yt-dlp %s\n", strings.Join(args, " "))
-		}
 		return nil, nil, err
 	}
 
-	jsonStr := string(output)
-	// When using -f with --dump-json, yt-dlp returns the selected format directly
-	audioURL := gjson.Get(jsonStr, "url").String()
-	if audioURL == "" {
-		return nil, nil, errors.New("YT-DLP: unable to find audio URL")
-	}
-
-	// Check if URL is m3u8 (HLS stream)
-	isHLS := strings.Contains(audioURL, ".m3u8")
-	if isHLS {
-		if Debug {
-			fmt.Println("Detected m3u8 stream, using yt-dlp piped download")
-		}
-		// For HLS, pipe yt-dlp output directly to FFmpeg
-		return startYtdlpPipedStream(youtubeURL)
-	}
-
-	// For direct URLs, use FFmpeg directly
 	if Debug {
-		fmt.Println("Using direct FFmpeg stream")
+		fmt.Println("Using scraper-resolved FFmpeg stream")
 	}
 	return startDirectFFmpeg(audioURL)
 }
 
-// startYtdlpPipedStream uses yt-dlp to download and pipe to FFmpeg for m3u8 streams.
-// This handles cookies and authentication properly.
-func startYtdlpPipedStream(youtubeURL string) (*PipelineCmd, io.ReadCloser, error) {
-	// Build yt-dlp args to output audio to stdout
-	ytArgs := []string{
-		"-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[acodec!=none]/best",
-		"--no-warnings",
-		// "--geo-bypass",
-		// "--referer", "https://www.youtube.com/",
-		// "--user-agent", UserAgent,
-		// "--extractor-args", "youtube:player_client=web,ios",
-		"--sleep-requests", "3",
-		"--sleep-interval", "5",
-		"-o", "-", // output to stdout
+func resolveYouTubeAudioURL(youtubeURL string) (string, error) {
+	videoID := extractYouTubeVideoID(youtubeURL)
+	if videoID == "" {
+		return "", errors.New("invalid YouTube URL")
 	}
 
-	if CookieFile != "" {
-		ytArgs = append(ytArgs, "--cookies", CookieFile)
+	requestBody, _ := json.Marshal(map[string]string{
+		"videoId": videoID,
+		"format":  "mp3",
+		"quality": "128",
+	})
+	resolved, err := resolveDlsrv("https://embed.dlsrv.online/api/download/mp3", requestBody, videoID)
+	if err != nil {
+		return "", fmt.Errorf("YouTube download link failed: %w", err)
+	}
+	return resolved.URL, nil
+}
+
+func resolveDlsrv(endpoint string, body []byte, videoID string) (*dlsrvResponse, error) {
+	resBody, err := doScraperRequest(http.MethodPost, endpoint, bytes.NewReader(body), map[string]string{
+		"Accept":       "*/*",
+		"Content-Type": "application/json",
+		"Referer":      "https://embed.dlsrv.online/v1/full?videoId=" + videoID,
+	})
+	if err != nil {
+		return nil, err
 	}
 
+	var resolved dlsrvResponse
+	if err := json.Unmarshal(resBody, &resolved); err != nil {
+		return nil, err
+	}
+	if resolved.URL == "" {
+		return nil, errors.New("empty download URL")
+	}
+	return &resolved, nil
+}
+
+func doScraperRequest(method string, rawURL string, body io.Reader, headers map[string]string) ([]byte, error) {
+	client := &http.Client{Timeout: 60 * time.Second}
 	if Proxy != "" {
-		ytArgs = append(ytArgs, "--proxy", Proxy)
+		proxyURL, err := url.Parse(Proxy)
+		if err != nil {
+			return nil, err
+		}
+		client.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
 	}
 
-	ytArgs = append(ytArgs, youtubeURL)
-
-	// FFmpeg reads from stdin and outputs PCM
-	ffArgs := []string{
-		"-hide_banner",
-		"-loglevel", "error",
-		"-i", "pipe:0", // read from stdin
-		"-vn",
-		"-f", "s16le",
-		"-ar", "48000",
-		"-ac", "2",
-		"pipe:1", // output to stdout
-	}
-
-	ytdlp := exec.Command("yt-dlp", ytArgs...)
-	ffmpeg := exec.Command("ffmpeg", ffArgs...)
-
-	// Pipe yt-dlp stdout to FFmpeg stdin
-	ytdlpOut, err := ytdlp.StdoutPipe()
+	req, err := http.NewRequest(method, rawURL, body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("yt-dlp stdout pipe: %w", err)
+		return nil, err
 	}
-	ffmpeg.Stdin = ytdlpOut
+	req.Header.Set("User-Agent", UserAgent)
+	for key, value := range headers {
+		if value != "" {
+			req.Header.Set(key, value)
+		}
+	}
 
-	// Get FFmpeg stdout for PCM output
-	ffmpegOut, err := ffmpeg.StdoutPipe()
+	res, err := client.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("ffmpeg stdout pipe: %w", err)
+		return nil, err
 	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP %d", res.StatusCode)
+	}
+	return io.ReadAll(res.Body)
+}
 
-	// Start both processes
-	if err := ytdlp.Start(); err != nil {
-		return nil, nil, fmt.Errorf("yt-dlp start: %w", err)
+func extractYouTubeVideoID(rawURL string) string {
+	patterns := []string{
+		`(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})`,
+		`youtube\.com/embed/([a-zA-Z0-9_-]{11})`,
+		`youtube\.com/v/([a-zA-Z0-9_-]{11})`,
+		`youtube\.com/shorts/([a-zA-Z0-9_-]{11})`,
 	}
-	if err := ffmpeg.Start(); err != nil {
-		ytdlp.Process.Kill()
-		return nil, nil, fmt.Errorf("ffmpeg start: %w", err)
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		if match := re.FindStringSubmatch(rawURL); len(match) > 1 {
+			return match[1]
+		}
 	}
-
-	// Create a wrapper that kills both processes
-	wrapper := &PipelineCmd{
-		ffmpeg: ffmpeg,
-		ytdlp:  ytdlp,
-	}
-
-	return wrapper, ffmpegOut, nil
+	return ""
 }
 
 // startDirectFFmpeg starts FFmpeg for direct audio URLs (m4a, webm, etc.)
@@ -211,17 +181,13 @@ func startDirectFFmpeg(audioURL string) (*PipelineCmd, io.ReadCloser, error) {
 	return wrapper, stdout, nil
 }
 
-// PipelineCmd wraps both yt-dlp and ffmpeg processes for cleanup
+// PipelineCmd wraps FFmpeg for cleanup.
 type PipelineCmd struct {
 	ffmpeg *exec.Cmd
-	ytdlp  *exec.Cmd
 }
 
-// Kill terminates both processes in the pipeline
+// Kill terminates the running process.
 func (p *PipelineCmd) Kill() error {
-	if p.ytdlp != nil && p.ytdlp.Process != nil {
-		p.ytdlp.Process.Kill()
-	}
 	if p.ffmpeg != nil && p.ffmpeg.Process != nil {
 		p.ffmpeg.Process.Kill()
 	}
