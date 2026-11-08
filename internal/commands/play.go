@@ -3,116 +3,76 @@ package commands
 import (
 	"fmt"
 	"go-tube/internal/player"
-	"go-tube/pkg/youtube"
-	"net/url"
+	"go-tube/pkg/provider"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-func Play(s *discordgo.Session, m *discordgo.MessageCreate, args []string, prefix string, debug bool) {
-	if len(args) == 0 {
-		s.ChannelMessageSendReply(m.ChannelID, fmt.Sprintf("type `%splay <url|title>`", prefix), &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
+func Play(s *discordgo.Session, m *discordgo.MessageCreate, args []string, prefix string, voiceChannelID string, debug bool) {
+	ref := &discordgo.MessageReference{
+		MessageID: m.ID,
+		ChannelID: m.ChannelID,
+		GuildID:   m.GuildID,
+	}
+
+	query := strings.TrimSpace(strings.Join(args, " "))
+	if query == "" {
+		_, _ = s.ChannelMessageSendReply(m.ChannelID,
+			fmt.Sprintf("Gunakan: `%splay <judul lagu / URL YouTube / YT Music / Spotify>`", prefix), ref)
 		return
 	}
 
-	// Check if user is in a voice channel
-	vc, err := s.State.VoiceState(m.GuildID, m.Author.ID)
-	if err != nil || vc == nil {
-		s.ChannelMessageSendReply(m.ChannelID, "please join a voice channel first", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
-		return
-	}
-
-	// Check if bot is already in another voice channel
-	ch := player.Channels[m.GuildID]
-	if ch != nil && ch.ChannelID != vc.ChannelID {
-		s.ChannelMessageSendReply(m.ChannelID, fmt.Sprintf("bot is already in another voice channel\nto force, type `%sdc` first", prefix), &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
-		return
-	}
-
-	_m, err := s.ChannelMessageSendReply(m.ChannelID, "searching...", &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID})
+	statusMsg, err := s.ChannelMessageSendReply(m.ChannelID, "🔍 Mencari musik...", ref)
 	if err != nil {
-		fmt.Printf("Error: %s\n", err.Error())
-		return
-	}
-
-	var q *url.URL
-	query := strings.Join(args, " ")
-	if len(query) >= 4 && query[:4] == "http" {
-		q, err = url.ParseRequestURI(query)
-		if err != nil {
-			fmt.Printf("Error: %s\n", err.Error())
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
-			return
-		}
-	}
-
-	if len(query) >= 4 && query[:4] == "http" && q.Path == "/playlist" {
-		handlePlaylist(s, m, _m, q.String(), debug)
-	} else {
-		handleSingleVideo(s, m, _m, query, debug)
-	}
-}
-
-func handlePlaylist(s *discordgo.Session, m *discordgo.MessageCreate, _m *discordgo.Message, playlistURL string, debug bool) {
-	if debug {
-		fmt.Println("Parsing playlist")
-	}
-
-	lists, err := youtube.ParsePlaylist(playlistURL)
-	if err != nil {
-		if err.Error() == "playlist_not_found" {
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "playlist not found")
-		} else if err.Error() == "invalid_playlist_url" {
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "invalid playlist url")
-		} else {
-			fmt.Printf("Error: %s\n", err.Error())
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
-		}
-		return
-	}
-
-	for _, v := range lists {
-		res, err := youtube.GetVideoInfo(v)
-		if err != nil {
-			fmt.Printf("Error: %s\n", err.Error())
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
-			return
-		}
-
 		if debug {
-			fmt.Printf("Playing audio: %s\n", res.YouTubeURL)
+			fmt.Printf("[Play] Error sending status message: %v\n", err)
 		}
-		_, err = player.AddQueue(m.GuildID, res, s, m.Author.ID)
+		return
+	}
+
+	tracks, err := provider.ResolveInput(query, m.Author.ID)
+	if err != nil || len(tracks) == 0 {
+		errMsg := "❌ Gagal menemukan musik. Pastikan kata kunci atau URL valid (YouTube, YouTube Music, atau Spotify)."
 		if err != nil {
-			fmt.Printf("Error: %s\n", err.Error())
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
-			return
+			switch err.Error() {
+			case "playlist_not_found":
+				errMsg = "❌ Playlist tidak ditemukan atau bersifat privat."
+			case "invalid_playlist_url", "invalid_video_url", "unsupported_url", "invalid_spotify_url", "unsupported_spotify_url":
+				errMsg = "❌ URL tidak valid atau tidak didukung."
+			}
 		}
-	}
-	s.ChannelMessageEdit(m.ChannelID, _m.ID, fmt.Sprintf("Queue:\n%s", strings.Join(player.ListQueue(m.GuildID), "\n")))
-}
-
-func handleSingleVideo(s *discordgo.Session, m *discordgo.MessageCreate, _m *discordgo.Message, query string, debug bool) {
-	res, err := youtube.SearchVideo(query)
-	if err != nil {
-		if err.Error() == "ivalid_url" {
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, maybe invalid url")
-		} else {
-			fmt.Printf("Error: %s\n", err.Error())
-			s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
-		}
+		_, _ = s.ChannelMessageEdit(m.ChannelID, statusMsg.ID, errMsg)
 		return
 	}
 
-	if debug {
-		fmt.Printf("Adding to queue: %s\n", res.Title)
+	wasRunning := false
+	if existing := player.GetPlayer(m.GuildID); existing != nil && existing.IsRunning() && existing.Queue.Len() > 0 {
+		wasRunning = true
 	}
-	_, err = player.AddQueue(m.GuildID, res, s, m.Author.ID)
+
+	gp, totalInQueue, err := player.EnqueueTracks(s, m.GuildID, voiceChannelID, m.ChannelID, tracks...)
 	if err != nil {
-		fmt.Printf("Error: %s\n", err.Error())
-		s.ChannelMessageEdit(m.ChannelID, _m.ID, "server error, try again")
+		_, _ = s.ChannelMessageEdit(m.ChannelID, statusMsg.ID, "❌ Gagal menambahkan lagu ke antrean.")
 		return
 	}
-	s.ChannelMessageEdit(m.ChannelID, _m.ID, fmt.Sprintf("Queue:\n%s", strings.Join(player.ListQueue(m.GuildID), "\n")))
+
+	var summary string
+	if len(tracks) == 1 {
+		t := tracks[0]
+		summary = fmt.Sprintf("✅ Ditambahkan ke antrean: **%s** %s `(%s)` — Posisi `#%d`",
+			t.DisplayTitle(), t.SourceBadge(), t.FormattedDuration(), totalInQueue)
+	} else {
+		summary = fmt.Sprintf("✅ Berhasil menambahkan **%d lagu** (%s) ke antrean (Total antrean: `%d lagu`).",
+			len(tracks), tracks[0].SourceBadge(), totalInQueue)
+	}
+
+	if wasRunning {
+		// Player is already running; attach navigation controls to this latest bot message
+		embed := BuildNowPlayingEmbed(gp, summary)
+		_, _ = EditToPlayerMessage(s, gp, m.ChannelID, statusMsg.ID, "", embed)
+	} else {
+		// Player is starting up and EventTrackStart will post the Now Playing controller shortly
+		_, _ = s.ChannelMessageEdit(m.ChannelID, statusMsg.ID, summary)
+	}
 }

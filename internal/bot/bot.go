@@ -2,9 +2,10 @@ package bot
 
 import (
 	"fmt"
+	"go-tube/internal/commands"
 	"go-tube/internal/config"
 	"go-tube/internal/player"
-	"go-tube/pkg/youtube"
+	"go-tube/pkg/provider"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -21,26 +22,37 @@ func New(cfg *config.Config) (*Bot, error) {
 		return nil, err
 	}
 
+	// Enable intents required for guild state, text channels, voice channel open-chat, and voice states
+	session.Identify.Intents = discordgo.IntentsGuilds |
+		discordgo.IntentsGuildMessages |
+		discordgo.IntentsGuildVoiceStates |
+		discordgo.IntentsMessageContent
+
 	user, err := session.User("@me")
 	if err != nil {
 		return nil, err
 	}
 
-	bot := &Bot{
+	b := &Bot{
 		Session: session,
 		Config:  cfg,
 		BotID:   user.ID,
 	}
 
-	session.AddHandler(bot.messageHandler)
+	provider.Configure(cfg.Debug, cfg.CookieFile, cfg.Proxy)
+	player.Debug = cfg.Debug
+	player.SetBufferSeconds(cfg.BufferSeconds)
+	player.OnPlayerStateChange = commands.HandlePlayerStateChange
+
+	session.AddHandler(b.messageHandler)
+	session.AddHandler(b.interactionHandler)
+	session.AddHandler(b.voiceStateHandler)
 
 	if cfg.Debug {
 		fmt.Println("Debug mode enabled")
-		player.Debug = true
-		youtube.Debug = true
 	}
 
-	return bot, nil
+	return b, nil
 }
 
 func (b *Bot) Start() error {
@@ -54,6 +66,6 @@ func (b *Bot) Start() error {
 func (b *Bot) Stop() {
 	player.ClearAll()
 	if b.Session != nil {
-		b.Session.Close()
+		_ = b.Session.Close()
 	}
 }

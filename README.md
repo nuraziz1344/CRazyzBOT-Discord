@@ -1,123 +1,74 @@
 # Discord Music Bot (Go)
 
-A feature-rich Discord music bot written in Go, supporting YouTube video playback and playlist queuing with high-quality audio streaming.
+Bot musik Discord berbasis Go dengan arsitektur modular, *thread-safe*, hemat CPU & memori, serta dilengkapi **30-Second Read-Ahead Opus Frame Buffer** untuk pemutaran audio bebas *lag*/putus-putus.
 
-## Features
+## Fitur Utama
 
-- Play music from YouTube
-- Queue management
-- Simple and intuitive commands
+- **Multi-Source Music Support**:
+  - **YouTube** (Video & Playlist)
+  - **YouTube Music** (Track & Playlist)
+  - **Spotify** (Track, Playlist, & Album — menggunakan scraper ringan + *lazy stream resolution* tanpa perlu Spotify API Key)
+- **Kontrol Playback & Antrean Lengkap**:
+  - Play langsung dari kata kunci (*keyword*) maupun URL (musik tunggal / playlist / album)
+  - Pencarian interaktif (`!search`) dengan **SelectMenu Dropdown** untuk memilih lagu
+  - Sistem Queue otomatis (mendukung append playlist secara instan)
+  - Pause / Resume, Skip / Next, Shuffle (acak antrean), Repeat (`Off`, `All`, `1`)
+  - Clear seluruh antrean atau hapus 1 lagu tertentu (`!remove <nomor>`)
+- **Navigasi Player Interaktif**:
+  - 5 tombol navigasi (`Play/Pause`, `Next`, `Shuffle`, `Repeat`, `Clear`) yang selalu menempel secara otomatis pada **pesan terakhir bot**.
+- **Otomasi & Proteksi Voice Channel**:
+  - Otomatis *join* ke voice channel saat `play` dan otomatis *leave* ketika antrean habis, di-clear, atau ketika **voice channel kosong (hanya tersisa bot)**.
+  - Proteksi akses command: User wajib berada di voice channel yang sama dengan bot.
+  - Mendukung penuh command dari **Text Channel** biasa maupun **Voice Channel Chat (Open-Chat)**.
 
-## Requirements
+## Struktur Proyek
 
-- [Go](https://go.dev) 1.24 or higher
-- [FFmpeg](https://ffmpeg.org) - for audio processing
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - for YouTube video extraction
-- Discord Bot Token from [here](https://discord.com/developers/applications)
-- Google Cloud API (YouTube Data API v3) from [here](https://console.cloud.google.com/)
-
-## Project Structure
-
-```
+```text
 /
-├── cmd/bot/              # Application entry point
+├── cmd/bot/              # Entry point aplikasi
 ├── internal/
-│   ├── bot/              # Bot initialization & message handling
-│   ├── commands/         # Command implementations (play, skip, etc.)
-│   ├── config/           # Configuration management
-│   └── player/           # Audio player & voice channel management
-├── pkg/youtube/          # YouTube API integration
-├── assets/               # Bot assets (logo, banner)
+│   ├── bot/              # Inisialisasi Discord session, Gateway Intents, & Voice Guard middleware
+│   ├── commands/         # Implementasi command, UI Embed, Tombol Navigasi, & Search Dropdown
+│   ├── config/           # Konfigurasi environment variables
+│   └── player/           # GuildPlayer manager, Queue thread-safe, & 30s Read-Ahead Opus Buffer
+├── pkg/
+│   ├── cookies/          # Loader Netscape cookies.txt untuk sesi scraper
+│   ├── music/            # Model domain Track & klasifikasi URL/keyword
+│   ├── provider/         # Unified music resolver & lazy stream resolution
+│   ├── spotify/          # Scraper metadata Spotify (Track, Playlist, Album)
+│   └── youtube/          # Scraper InnerTube YouTube/YT Music, Data API fallback, & Audio Pipeline (dlsrv + yt-dlp)
 ├── Dockerfile            # Multi-stage Docker build
-├── Makefile              # Build automation
+├── Makefile              # Otomasi build
 └── README.md
 ```
 
-## Installation
-
-### Run
-
-```bash
-# Clone the repository
-git clone https://github.com/nuraziz1344/CRazyzBOT-Discord
-cd CRazyzBOT-Discord
-
-# Install dependencies
-go mod download
-
-# Run the bot
-go run ./cmd/bot
-```
-
-### Build
-
-```bash
-# Build the bot
-go build -o bin/bot ./cmd/bot
-
-# Run the bot
-./bin/bot
-```
-
-### Using Docker
-
-```bash
-# Build Docker image
-docker build -t discord-music-bot .
-
-# Run in Docker
-docker run --rm --env-file .env discord-music-bot
-```
-
-## Configuration
-
-Create a `.env` file in the project root with the following variables:
+## Konfigurasi (`.env`)
 
 ```env
 BOT_TOKEN=your_discord_bot_token
 PREFIX=!
-YT_APIKEY=your_youtube_api_key
 DEBUG=false
+
+# Opsional:
+BUFFER_SECONDS=30
+YT_APIKEY=
+COOKIE_FILE=cookies.txt
+PROXY=
 ```
 
-## Commands
+## Daftar Perintah (Commands)
 
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `!ping` | - | Check if the bot is responsive |
-| `!play <url\|title>` | `!p` | Play a song or add to queue |
-| `!skip` | `!s` | Skip the current song |
-| `!queue` | `!q` | Show the current queue |
-| `!clear` | `!dc` | Clear queue and disconnect |
-
-## Usage Examples
-
-```
-# Play a song by search
-!play never gonna give you up
-
-# Play from URL
-!play https://www.youtube.com/watch?v=dQw4w9WgXcQ
-
-# Play entire playlist
-!play https://www.youtube.com/playlist?list=PLxxxxxx
-
-# Check queue
-!queue
-
-# Skip current song
-!skip
-
-# Disconnect bot
-!clear
-```
-
-## License
-
-ISC License
-
-## Acknowledgments
-
-- [discordgo](https://github.com/bwmarrin/discordgo) - Discord API wrapper
-- [opus](https://github.com/hraban/opus) - Opus audio codec bindings
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube video extraction
+| Command | Alias | Deskripsi |
+|---------|-------|-----------|
+| `!play <keyword\|url>` | `!p` | Putar musik langsung dari kata kunci atau URL (YT / YT Music / Spotify) |
+| `!search <keyword>` | `!sc`, `!find` | Cari lagu dan pilih melalui menu *dropdown* interaktif |
+| `!pause` | - | Jeda lagu yang sedang diputar |
+| `!resume` | `!unpause` | Lanjutkan lagu yang dijeda |
+| `!skip` | `!s`, `!next` | Lewati lagu yang sedang diputar |
+| `!queue` | `!q` | Tampilkan daftar antrean musik, status repeat, dan durasi |
+| `!shuffle` | `!sh`, `!acak` | Acak urutan lagu berikutnya di dalam antrean |
+| `!repeat [off\|all\|1]` | `!loop`, `!rp` | Ubah mode repeat (`Off`, `All`, `1`) |
+| `!remove <nomor>` | `!rm`, `!del` | Hapus 1 lagu tertentu dari antrean berdasarkan nomor urut |
+| `!clear` | `!dc`, `!leave`, `!stop` | Kosongkan seluruh antrean, hentikan musik, dan keluar dari voice channel |
+| `!help` | `!h` | Tampilkan panduan seluruh perintah bot |
+| `!ping` | - | Cek responsivitas bot |
