@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go-tube/internal/bot"
 	"go-tube/internal/config"
+	"go-tube/pkg/youtube"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,10 +33,18 @@ func main() {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if cfg.YtDlpAutoUpdate {
+		youtube.StartAutoUpdater(ctx, cfg.YtDlpUpdateIntervalHrs)
+	}
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
 	fmt.Println("Shutting down...")
+	cancel()
 	discordBot.Stop()
 }

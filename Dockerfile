@@ -13,7 +13,7 @@ RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /app/bot ./cmd/bot
 
 FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates ffmpeg opus opusfile python3 py3-pip && \
+RUN apk add --no-cache ca-certificates ffmpeg opus opusfile python3 py3-pip nodejs && \
     addgroup -g 10001 -S botgroup && \
     adduser -u 10001 -S -G botgroup -h /home/botuser botuser
 

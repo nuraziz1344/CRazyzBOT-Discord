@@ -49,6 +49,7 @@ func New(cfg *config.Config) (*Bot, error) {
 	session.AddHandler(b.voiceStateHandler)
 
 	if cfg.Debug {
+		session.LogLevel = discordgo.LogInformational
 		fmt.Println("Debug mode enabled")
 	}
 

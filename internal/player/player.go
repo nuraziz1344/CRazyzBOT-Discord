@@ -235,6 +235,10 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 	case <-time.After(3 * time.Second):
 	}
 
+	if Debug {
+		fmt.Printf("[Player] Starting Opus playback for %s (buffered=%d frames)\n", track.DisplayTitle(), len(frameChan))
+	}
+
 	_ = dgv.Speaking(true)
 	defer func() {
 		_ = dgv.Speaking(false)
@@ -244,6 +248,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 	defer ticker.Stop()
 
 	wasPaused := false
+	sentFrames := 0
 
 	// Consumer Loop: paces pre-encoded Opus frames every 20ms without blocking on network/FFmpeg I/O
 	for {
@@ -276,11 +281,18 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 			frame, ok := <-frameChan
 			if !ok {
 				// Stream finished all buffered frames
+				if Debug {
+					fmt.Printf("[Player] Track finished (%d Opus frames sent)\n", sentFrames)
+				}
 				return false, false
 			}
 
 			select {
 			case activeDGV.OpusSend <- frame:
+				sentFrames++
+				if Debug && sentFrames == 50 {
+					fmt.Printf("[Player] Sent first 50 Opus frames (~1s, last frame %d bytes)\n", len(frame))
+				}
 			case <-ctx.Done():
 				return true, false
 			case <-time.After(60 * time.Millisecond):

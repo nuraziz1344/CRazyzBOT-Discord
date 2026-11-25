@@ -12,13 +12,15 @@ import (
 )
 
 type Config struct {
-	BotToken      string
-	Prefix        string
-	YTAPIKey      string
-	Debug         bool
-	CookieFile    string
-	Proxy         string
-	BufferSeconds int
+	BotToken               string
+	Prefix                 string
+	YTAPIKey               string
+	Debug                  bool
+	CookieFile             string
+	Proxy                  string
+	BufferSeconds          int
+	YtDlpAutoUpdate        bool
+	YtDlpUpdateIntervalHrs int
 }
 
 func Load() (*Config, error) {
@@ -47,14 +49,28 @@ func Load() (*Config, error) {
 		bufferSeconds = 300
 	}
 
+	ytdlpUpdateInterval := 12
+	if rawInterval := strings.TrimSpace(os.Getenv("YTDLP_UPDATE_INTERVAL_HOURS")); rawInterval != "" {
+		if parsed, err := strconv.Atoi(rawInterval); err == nil && parsed > 0 {
+			ytdlpUpdateInterval = parsed
+		}
+	}
+	if ytdlpUpdateInterval < 1 {
+		ytdlpUpdateInterval = 1
+	} else if ytdlpUpdateInterval > 168 {
+		ytdlpUpdateInterval = 168
+	}
+
 	return &Config{
-		BotToken:      botToken,
-		Prefix:        prefix,
-		YTAPIKey:      strings.TrimSpace(os.Getenv("YT_APIKEY")),
-		Debug:         strings.EqualFold(strings.TrimSpace(os.Getenv("DEBUG")), "true"),
-		CookieFile:    strings.TrimSpace(os.Getenv("COOKIE_FILE")),
-		Proxy:         strings.TrimSpace(os.Getenv("PROXY")),
-		BufferSeconds: bufferSeconds,
+		BotToken:               botToken,
+		Prefix:                 prefix,
+		YTAPIKey:               strings.TrimSpace(os.Getenv("YT_APIKEY")),
+		Debug:                  strings.EqualFold(strings.TrimSpace(os.Getenv("DEBUG")), "true"),
+		CookieFile:             strings.TrimSpace(os.Getenv("COOKIE_FILE")),
+		Proxy:                  strings.TrimSpace(os.Getenv("PROXY")),
+		BufferSeconds:          bufferSeconds,
+		YtDlpAutoUpdate:        strings.EqualFold(strings.TrimSpace(os.Getenv("YTDLP_AUTO_UPDATE")), "true"),
+		YtDlpUpdateIntervalHrs: ytdlpUpdateInterval,
 	}, nil
 }
 
@@ -94,6 +110,11 @@ func (c *Config) PrintStartupLog() {
 		proxyStatus = c.Proxy
 	}
 
+	ytdlpUpdateStatus := "Disabled"
+	if c.YtDlpAutoUpdate {
+		ytdlpUpdateStatus = fmt.Sprintf("Enabled (every %dh)", c.YtDlpUpdateIntervalHrs)
+	}
+
 	fmt.Println("============================================================")
 	fmt.Println("               DISCORD MUSIC BOT CONFIGURATION              ")
 	fmt.Println("============================================================")
@@ -101,7 +122,8 @@ func (c *Config) PrintStartupLog() {
 	fmt.Printf("  Command Prefix     : %q (or @Bot mention)\n", c.Prefix)
 	fmt.Printf("  Debug Mode         : %v\n", c.Debug)
 	fmt.Printf("  Music Sources      : YouTube, YouTube Music, Spotify\n")
-	fmt.Printf("  Audio Pipeline     : Tier 1 (dlsrv Scraper) -> Tier 2 (yt-dlp)\n")
+	fmt.Printf("  Audio Pipeline     : yt-dlp -g -> Direct FFmpeg (fallback: piped yt-dlp)\n")
+	fmt.Printf("  yt-dlp Auto-Update : %s\n", ytdlpUpdateStatus)
 	fmt.Printf("  YouTube Data API   : %s\n", ytAPIStatus)
 	fmt.Printf("  Cookie File        : %s\n", cookieStatus)
 	fmt.Printf("  Network Proxy      : %s\n", proxyStatus)
