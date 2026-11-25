@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go-tube/internal/bot"
 	"go-tube/internal/config"
@@ -12,7 +13,6 @@ import (
 
 func main() {
 	fmt.Println("Starting Discord Music Bot...")
-	fmt.Println("Loading environment variables...")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -20,13 +20,7 @@ func main() {
 		return
 	}
 
-	fmt.Println("Environment variables loaded successfully")
-	fmt.Printf("Bot token: %s...\n", cfg.BotToken[:5])
-
-	// Set youtube package config
-	youtube.Debug = cfg.Debug
-	youtube.CookieFile = cfg.CookieFile
-	youtube.Proxy = cfg.Proxy
+	cfg.PrintStartupLog()
 
 	discordBot, err := bot.New(cfg)
 	if err != nil {
@@ -39,10 +33,18 @@ func main() {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if cfg.YtDlpAutoUpdate {
+		youtube.StartAutoUpdater(ctx, cfg.YtDlpUpdateIntervalHrs)
+	}
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
 	fmt.Println("Shutting down...")
+	cancel()
 	discordBot.Stop()
 }

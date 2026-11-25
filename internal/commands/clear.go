@@ -8,5 +8,5 @@ import (
 
 func Clear(s *discordgo.Session, m *discordgo.MessageCreate) {
 	player.Clear(m.GuildID)
-	s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
+	_ = s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
 }
