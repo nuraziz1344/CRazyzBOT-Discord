@@ -1,0 +1,16 @@
+services:
+  bot:
+    image: ghcr.io/nuraziz1344/crazyzbot-discord:${IMAGE_TAG:-latest}
+    container_name: crazyzbot-discord
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
+    env_file:
+      - .env
+    volumes:
+      - ./cookies.txt:/app/cookies.txt
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

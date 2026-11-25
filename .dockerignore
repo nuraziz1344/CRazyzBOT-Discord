@@ -1,7 +1,9 @@
 # Git & Docs
 .git
+.github/
 .gitignore
 .dockerignore
+docker-compose*.yml
 README.md
 Makefile
 assets/
