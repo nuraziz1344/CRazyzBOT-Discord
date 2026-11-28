@@ -81,6 +81,36 @@ func Repeat(s *discordgo.Session, m *discordgo.MessageCreate, args []string, pre
 	_, _ = SendLatestPlayerMessage(s, gp, m.ChannelID, "", embed, ref)
 }
 
+// Autoplay toggles or explicitly sets Autoplay mode (On/Off).
+func Autoplay(s *discordgo.Session, m *discordgo.MessageCreate, args []string, prefix string) {
+	ref := &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID}
+	gp := player.GetPlayer(m.GuildID)
+	if gp == nil || gp.Queue.Len() == 0 {
+		_, _ = s.ChannelMessageSendReply(m.ChannelID, "❌ Tidak ada antrean musik yang aktif.", ref)
+		return
+	}
+
+	var enabled bool
+	if len(args) == 0 {
+		enabled = gp.Queue.ToggleAutoplay()
+	} else {
+		parsed, ok := player.ParseAutoplayMode(args[0])
+		if !ok {
+			_, _ = s.ChannelMessageSendReply(m.ChannelID,
+				fmt.Sprintf("Gunakan: `%sautoplay <on|off>`", prefix), ref)
+			return
+		}
+		enabled = gp.Queue.SetAutoplay(parsed)
+	}
+
+	if enabled {
+		gp.WarmAutoplayCache()
+	}
+
+	embed := BuildNowPlayingEmbed(gp, fmt.Sprintf("📻 Mode Autoplay diubah ke: **%s**", player.FormatAutoplay(enabled)))
+	_, _ = SendLatestPlayerMessage(s, gp, m.ChannelID, "", embed, ref)
+}
+
 // Remove deletes 1 track from the queue by its 1-based number.
 func Remove(s *discordgo.Session, m *discordgo.MessageCreate, args []string, prefix string) {
 	ref := &discordgo.MessageReference{MessageID: m.ID, ChannelID: m.ChannelID, GuildID: m.GuildID}
@@ -185,6 +215,22 @@ func HandlePlayerButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	case BtnRepeat:
 		mode := gp.Queue.CycleRepeat()
 		notice := fmt.Sprintf("🔁 Mode Repeat: **%s**", mode.String())
+		embed := BuildNowPlayingEmbed(gp, notice)
+		comps := BuildPlayerComponents(gp)
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Embeds:     []*discordgo.MessageEmbed{embed},
+				Components: comps,
+			},
+		})
+
+	case BtnAutoplay:
+		enabled := gp.Queue.ToggleAutoplay()
+		if enabled {
+			gp.WarmAutoplayCache()
+		}
+		notice := fmt.Sprintf("📻 Mode Autoplay: **%s**", player.FormatAutoplay(enabled))
 		embed := BuildNowPlayingEmbed(gp, notice)
 		comps := BuildPlayerComponents(gp)
 		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

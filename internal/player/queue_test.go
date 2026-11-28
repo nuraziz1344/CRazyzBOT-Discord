@@ -113,3 +113,64 @@ func TestQueueRemoveAndShuffle(t *testing.T) {
 		t.Fatalf("expected currently playing track '1' to stay at index 0 after shuffle, got %s", q.Current().ID)
 	}
 }
+
+func TestAutoplayModeAndQueueToggle(t *testing.T) {
+	for _, onArg := range []string{"on", "true", "1", "enable", "aktif", " ON "} {
+		enabled, ok := ParseAutoplayMode(onArg)
+		if !ok || !enabled {
+			t.Errorf("ParseAutoplayMode(%q) = (%v, %v), want (true, true)", onArg, enabled, ok)
+		}
+	}
+	for _, offArg := range []string{"off", "false", "0", "disable", "mati", " OFF "} {
+		enabled, ok := ParseAutoplayMode(offArg)
+		if !ok || enabled {
+			t.Errorf("ParseAutoplayMode(%q) = (%v, %v), want (false, true)", offArg, enabled, ok)
+		}
+	}
+	if _, ok := ParseAutoplayMode("maybe"); ok {
+		t.Errorf("expected ok=false for invalid autoplay arg")
+	}
+
+	if FormatAutoplay(true) != "On" || FormatAutoplay(false) != "Off" {
+		t.Errorf("unexpected FormatAutoplay output")
+	}
+
+	q := NewQueueWithAutoplay(true)
+	if !q.Autoplay() {
+		t.Fatal("expected initial autoplay=true")
+	}
+	if q.ToggleAutoplay() {
+		t.Fatal("expected ToggleAutoplay() to return false")
+	}
+	if !q.SetAutoplay(true) || !q.Autoplay() {
+		t.Fatal("expected SetAutoplay(true) to enable autoplay")
+	}
+}
+
+func TestGuildPlayerRecordPlayedAndSnapshot(t *testing.T) {
+	gp := &GuildPlayer{Queue: NewQueue()}
+	gp.RecordPlayed(nil)
+	gp.RecordPlayed(&music.Track{
+		ID:         "dQw4w9WgXcQ",
+		Title:      "Never Gonna Give You Up (Official Video)",
+		Artist:     "Rick Astley",
+		YouTubeURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+		Source:     music.SourceYouTube,
+	})
+	// Consecutive duplicate should not grow history unnecessarily
+	gp.RecordPlayed(&music.Track{
+		ID:         "dQw4w9WgXcQ",
+		Title:      "Never Gonna Give You Up",
+		Artist:     "Rick Astley",
+		YouTubeURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+		Source:     music.SourceYouTube,
+	})
+
+	ids, titles := gp.PlayedSnapshot()
+	if !ids["dQw4w9WgXcQ"] {
+		t.Fatalf("expected dQw4w9WgXcQ in played IDs, got %v", ids)
+	}
+	if len(titles) != 1 {
+		t.Fatalf("expected 1 normalized title in played snapshot, got %d (%v)", len(titles), titles)
+	}
+}

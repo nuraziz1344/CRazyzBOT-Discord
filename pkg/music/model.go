@@ -28,6 +28,7 @@ type Track struct {
 	StreamQuery string        `json:"stream_query,omitempty"`
 	Source      SourceType    `json:"source"`
 	RequestedBy string        `json:"requested_by,omitempty"`
+	Autoplay    bool          `json:"autoplay,omitempty"`
 }
 
 // DisplayTitle returns a clean "Artist - Title" or "Title" string.

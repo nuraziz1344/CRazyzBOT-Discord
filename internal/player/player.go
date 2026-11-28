@@ -21,8 +21,9 @@ const (
 	framesPerSec  = 50  // 1000ms / 20ms = 50 frames per second
 	defaultBufSec = 30
 
-	prebufferFrames  = 25 // ~500ms warmup before starting playback
-	pipeReaderBuffer = 64 * 1024
+	prebufferFrames     = 25 // ~500ms warmup before starting playback
+	pipeReaderBuffer    = 64 * 1024
+	maxAutoplayFailures = 3
 )
 
 var (
@@ -49,6 +50,7 @@ func (gp *GuildPlayer) runPlayerLoop() {
 		return
 	}
 
+	consecutiveFailures := 0
 	for {
 		gp.mu.Lock()
 		running := gp.isRunning
@@ -65,7 +67,12 @@ func (gp *GuildPlayer) runPlayerLoop() {
 		// Trigger background prefetch for the next track in queue
 		go gp.prefetchNextTrack()
 
-		skipped, forceRemove := gp.playSingleTrack(currentTrack)
+		skipped, forceRemove, playedOk := gp.playSingleTrack(currentTrack)
+		if playedOk || skipped {
+			consecutiveFailures = 0
+		} else {
+			consecutiveFailures++
+		}
 
 		gp.mu.Lock()
 		stillRunning := gp.isRunning
@@ -76,6 +83,11 @@ func (gp *GuildPlayer) runPlayerLoop() {
 
 		next := gp.Queue.Advance(skipped, forceRemove)
 		if next == nil {
+			if gp.Queue.Autoplay() && consecutiveFailures < maxAutoplayFailures && currentTrack != nil {
+				if gp.tryEnqueueAutoplay(currentTrack) {
+					continue
+				}
+			}
 			break
 		}
 	}
@@ -84,18 +96,43 @@ func (gp *GuildPlayer) runPlayerLoop() {
 	ClearAndLeave(gp.GuildID, "")
 }
 
-func (gp *GuildPlayer) prefetchNextTrack() {
-	next := gp.Queue.PeekNext()
-	if next == nil || next.YouTubeURL != "" {
-		return
+func (gp *GuildPlayer) tryEnqueueAutoplay(seed *music.Track) bool {
+	excludeIDs, excludeTitles := gp.PlayedSnapshot()
+	related, err := provider.ResolveRelatedTrack(seed, excludeIDs, excludeTitles)
+	if err != nil || related == nil {
+		if Debug {
+			fmt.Printf("[Autoplay] Failed to resolve related track: %v\n", err)
+		}
+		return false
 	}
+	if !gp.IsRunning() {
+		return false
+	}
+	gp.Queue.Enqueue(related)
 	if Debug {
-		fmt.Printf("[Prefetch] Resolving next track in background: %s\n", next.DisplayTitle())
+		fmt.Printf("[Autoplay] Enqueued related track: %s\n", related.DisplayTitle())
 	}
-	_ = provider.EnsureYouTubeURL(next)
+	return true
 }
 
-func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceRemove bool) {
+func (gp *GuildPlayer) prefetchNextTrack() {
+	if next := gp.Queue.PeekNext(); next != nil {
+		if next.YouTubeURL == "" {
+			if Debug {
+				fmt.Printf("[Prefetch] Resolving next track in background: %s\n", next.DisplayTitle())
+			}
+			_ = provider.EnsureYouTubeURL(next)
+		}
+		return
+	}
+	if gp.Queue.Autoplay() {
+		if cur := gp.Queue.Current(); cur != nil {
+			provider.WarmRelatedTracks(cur.Clone())
+		}
+	}
+}
+
+func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceRemove bool, playedOk bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	gp.mu.Lock()
@@ -126,25 +163,27 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 		}
 		if err := provider.EnsureYouTubeURL(track); err != nil {
 			fmt.Printf("[Player] Failed to resolve track %s: %v\n", track.DisplayTitle(), err)
-			return false, false
+			return false, false, false
 		}
 	}
 
+	gp.RecordPlayed(track)
+
 	if ctx.Err() != nil {
-		return true, false
+		return true, false, false
 	}
 
 	cmd, pcm, err := youtube.GetAudioStream(track.YouTubeURL)
 	if err != nil {
 		fmt.Printf("[Player] Error getting audio stream for %s (%s): %v\n", track.DisplayTitle(), track.YouTubeURL, err)
-		return false, false
+		return false, false, false
 	}
 
 	encoder, err := opus.NewEncoder(sampleRate, channels, opus.Application(opus.AppAudio))
 	if err != nil {
 		fmt.Printf("[Player] Error creating opus encoder: %v\n", err)
 		_ = cmd.Kill()
-		return false, false
+		return false, false, false
 	}
 
 	gp.mu.Lock()
@@ -154,7 +193,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 
 	if dgv == nil {
 		_ = cmd.Kill()
-		return false, false
+		return false, false, false
 	}
 
 	// Notify UI that a new track is now playing
@@ -231,7 +270,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 	select {
 	case <-prebuffered:
 	case <-ctx.Done():
-		return true, false
+		return true, false, false
 	case <-time.After(3 * time.Second):
 	}
 
@@ -240,6 +279,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 	}
 
 	_ = dgv.Speaking(true)
+	playedOk = true
 	defer func() {
 		_ = dgv.Speaking(false)
 	}()
@@ -254,7 +294,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 	for {
 		select {
 		case <-ctx.Done():
-			return true, false
+			return true, false, playedOk
 
 		case <-ticker.C:
 			gp.mu.Lock()
@@ -263,7 +303,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 			gp.mu.Unlock()
 
 			if activeDGV == nil {
-				return false, false
+				return false, false, playedOk
 			}
 
 			if paused {
@@ -284,7 +324,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 				if Debug {
 					fmt.Printf("[Player] Track finished (%d Opus frames sent)\n", sentFrames)
 				}
-				return false, false
+				return false, false, playedOk
 			}
 
 			select {
@@ -294,7 +334,7 @@ func (gp *GuildPlayer) playSingleTrack(track *music.Track) (skipped bool, forceR
 					fmt.Printf("[Player] Sent first 50 Opus frames (~1s, last frame %d bytes)\n", len(frame))
 				}
 			case <-ctx.Done():
-				return true, false
+				return true, false, playedOk
 			case <-time.After(60 * time.Millisecond):
 				if Debug {
 					fmt.Println("[Player] Voice OpusSend congested, dropping frame")

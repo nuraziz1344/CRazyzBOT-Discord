@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go-tube/pkg/music"
+	"go-tube/pkg/provider"
 	"go-tube/pkg/youtube"
 	"sync"
 	"time"
@@ -28,6 +29,10 @@ const (
 // OnPlayerStateChange is invoked when the player starts a new track, updates its state, or stops.
 var OnPlayerStateChange func(s *discordgo.Session, gp *GuildPlayer, event PlayerEvent, detail string)
 
+var DefaultAutoplay = false
+
+const maxPlayedHistory = 50
+
 // GuildPlayer manages voice connection, queue, and playback state for a single Discord guild.
 type GuildPlayer struct {
 	mu                 sync.Mutex
@@ -45,6 +50,8 @@ type GuildPlayer struct {
 	forceRemoveCurrent bool
 	currentCancel      context.CancelFunc
 	currentCmd         *youtube.PipelineCmd
+	playedIDs          []string
+	playedTitles       []string
 }
 
 var (
@@ -70,7 +77,7 @@ func getOrCreatePlayer(guildID, voiceChannelID, textChannelID string, s *discord
 			GuildID:        guildID,
 			VoiceChannelID: voiceChannelID,
 			TextChannelID:  textChannelID,
-			Queue:          NewQueue(),
+			Queue:          NewQueueWithAutoplay(DefaultAutoplay),
 			session:        s,
 		}
 		players[guildID] = gp
@@ -167,6 +174,58 @@ func (gp *GuildPlayer) IsRunning() bool {
 	gp.mu.Lock()
 	defer gp.mu.Unlock()
 	return gp.isRunning
+}
+
+// RecordPlayed appends a track's video ID and normalized title to the guild's session history.
+func (gp *GuildPlayer) RecordPlayed(t *music.Track) {
+	if gp == nil || t == nil {
+		return
+	}
+	vID := youtube.ExtractVideoID(t.YouTubeURL)
+	if vID == "" && t.Source != music.SourceSpotify {
+		vID = t.ID
+	}
+	norm := provider.NormalizeTitleKey(t.Artist, t.Title)
+
+	gp.mu.Lock()
+	defer gp.mu.Unlock()
+	if vID != "" && (len(gp.playedIDs) == 0 || gp.playedIDs[len(gp.playedIDs)-1] != vID) {
+		gp.playedIDs = append(gp.playedIDs, vID)
+		if len(gp.playedIDs) > maxPlayedHistory {
+			gp.playedIDs = gp.playedIDs[len(gp.playedIDs)-maxPlayedHistory:]
+		}
+	}
+	if norm != "" && (len(gp.playedTitles) == 0 || gp.playedTitles[len(gp.playedTitles)-1] != norm) {
+		gp.playedTitles = append(gp.playedTitles, norm)
+		if len(gp.playedTitles) > maxPlayedHistory {
+			gp.playedTitles = gp.playedTitles[len(gp.playedTitles)-maxPlayedHistory:]
+		}
+	}
+}
+
+// PlayedSnapshot returns fresh sets of played video IDs and normalized titles for deduplication.
+func (gp *GuildPlayer) PlayedSnapshot() (map[string]bool, map[string]bool) {
+	gp.mu.Lock()
+	defer gp.mu.Unlock()
+	ids := make(map[string]bool, len(gp.playedIDs))
+	for _, id := range gp.playedIDs {
+		ids[id] = true
+	}
+	titles := make(map[string]bool, len(gp.playedTitles))
+	for _, title := range gp.playedTitles {
+		titles[title] = true
+	}
+	return ids, titles
+}
+
+// WarmAutoplayCache pre-warms related tracks for the currently playing track when Autoplay is on.
+func (gp *GuildPlayer) WarmAutoplayCache() {
+	if gp == nil || gp.Queue == nil || !gp.Queue.Autoplay() {
+		return
+	}
+	if cur := gp.Queue.Current(); cur != nil {
+		go provider.WarmRelatedTracks(cur.Clone())
+	}
 }
 
 // SetPaused sets pause state and returns the updated state.

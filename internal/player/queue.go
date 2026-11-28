@@ -40,22 +40,46 @@ func ParseRepeatMode(arg string) (RepeatMode, bool) {
 	}
 }
 
+func ParseAutoplayMode(arg string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(arg)) {
+	case "on", "true", "1", "enable", "aktif":
+		return true, true
+	case "off", "false", "0", "disable", "mati":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func FormatAutoplay(enabled bool) string {
+	if enabled {
+		return "On"
+	}
+	return "Off"
+}
+
 var (
 	ErrQueueEmpty        = errors.New("queue is empty")
 	ErrInvalidQueueIndex = errors.New("invalid queue index")
 )
 
-// Queue is a thread-safe music queue supporting Repeat (Off, All, 1), Shuffle, and item deletion.
+// Queue is a thread-safe music queue supporting Repeat (Off, All, 1), Shuffle, Autoplay, and item deletion.
 type Queue struct {
-	mu     sync.RWMutex
-	items  []*music.Track
-	repeat RepeatMode
+	mu       sync.RWMutex
+	items    []*music.Track
+	repeat   RepeatMode
+	autoplay bool
 }
 
 func NewQueue() *Queue {
+	return NewQueueWithAutoplay(false)
+}
+
+func NewQueueWithAutoplay(autoplay bool) *Queue {
 	return &Queue{
-		items:  make([]*music.Track, 0),
-		repeat: RepeatOff,
+		items:    make([]*music.Track, 0),
+		repeat:   RepeatOff,
+		autoplay: autoplay,
 	}
 }
 
@@ -230,4 +254,27 @@ func (q *Queue) CycleRepeat() RepeatMode {
 		q.repeat = RepeatOff
 	}
 	return q.repeat
+}
+
+// Autoplay returns whether autoplay is enabled.
+func (q *Queue) Autoplay() bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.autoplay
+}
+
+// SetAutoplay sets autoplay explicitly and returns the updated state.
+func (q *Queue) SetAutoplay(enabled bool) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.autoplay = enabled
+	return q.autoplay
+}
+
+// ToggleAutoplay flips autoplay and returns the updated state.
+func (q *Queue) ToggleAutoplay() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.autoplay = !q.autoplay
+	return q.autoplay
 }

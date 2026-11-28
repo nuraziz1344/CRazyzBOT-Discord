@@ -17,7 +17,7 @@ func Queue(s *discordgo.Session, m *discordgo.MessageCreate) {
 	tracks, repeatMode := gp.Queue.Snapshot()
 	embed := &discordgo.MessageEmbed{
 		Title:       "📋 Daftar Antrean Musik (Queue)",
-		Description: FormatTrackList(tracks, repeatMode, gp.IsPaused()),
+		Description: FormatTrackList(tracks, repeatMode, gp.Queue.Autoplay(), gp.IsPaused()),
 		Color:       0x3498DB,
 	}
 

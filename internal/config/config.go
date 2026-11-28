@@ -21,6 +21,7 @@ type Config struct {
 	BufferSeconds          int
 	YtDlpAutoUpdate        bool
 	YtDlpUpdateIntervalHrs int
+	Autoplay               bool
 }
 
 func Load() (*Config, error) {
@@ -71,6 +72,7 @@ func Load() (*Config, error) {
 		BufferSeconds:          bufferSeconds,
 		YtDlpAutoUpdate:        strings.EqualFold(strings.TrimSpace(os.Getenv("YTDLP_AUTO_UPDATE")), "true"),
 		YtDlpUpdateIntervalHrs: ytdlpUpdateInterval,
+		Autoplay:               strings.EqualFold(strings.TrimSpace(os.Getenv("AUTOPLAY")), "true"),
 	}, nil
 }
 
@@ -115,6 +117,11 @@ func (c *Config) PrintStartupLog() {
 		ytdlpUpdateStatus = fmt.Sprintf("Enabled (every %dh)", c.YtDlpUpdateIntervalHrs)
 	}
 
+	autoplayStatus := "Disabled (toggle via command/button)"
+	if c.Autoplay {
+		autoplayStatus = "Enabled by default"
+	}
+
 	fmt.Println("============================================================")
 	fmt.Println("               DISCORD MUSIC BOT CONFIGURATION              ")
 	fmt.Println("============================================================")
@@ -124,6 +131,7 @@ func (c *Config) PrintStartupLog() {
 	fmt.Printf("  Music Sources      : YouTube, YouTube Music, Spotify\n")
 	fmt.Printf("  Audio Pipeline     : yt-dlp -g -> Direct FFmpeg (fallback: piped yt-dlp)\n")
 	fmt.Printf("  yt-dlp Auto-Update : %s\n", ytdlpUpdateStatus)
+	fmt.Printf("  Autoplay Default   : %s\n", autoplayStatus)
 	fmt.Printf("  YouTube Data API   : %s\n", ytAPIStatus)
 	fmt.Printf("  Cookie File        : %s\n", cookieStatus)
 	fmt.Printf("  Network Proxy      : %s\n", proxyStatus)

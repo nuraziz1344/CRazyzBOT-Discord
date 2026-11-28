@@ -99,6 +99,9 @@ func (b *Bot) messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	case "repeat", "loop", "rp":
 		commands.Repeat(s, m, args, b.Config.Prefix)
 
+	case "autoplay", "ap", "auto":
+		commands.Autoplay(s, m, args, b.Config.Prefix)
+
 	case "remove", "rm", "delete", "del":
 		commands.Remove(s, m, args, b.Config.Prefix)
 
@@ -163,6 +166,7 @@ func isKnownCommand(cmd string) bool {
 		"skip", "s", "next",
 		"shuffle", "sh", "acak",
 		"repeat", "loop", "rp",
+		"autoplay", "ap", "auto",
 		"remove", "rm", "delete", "del",
 		"clear", "dc", "leave", "stop",
 		"queue", "q":
@@ -183,10 +187,11 @@ func (b *Bot) sendHelp(s *discordgo.Session, m *discordgo.MessageCreate) {
 			"• `%squeue` (`%sq`) — Tampilkan daftar antrean musik\n"+
 			"• `%sshuffle` (`%ssh`) — Acak urutan antrean musik\n"+
 			"• `%srepeat [off|all|1]` (`%sloop`) — Atur mode pengulangan lagu\n"+
+			"• `%sautoplay [on|off]` (`%sap`) — Putar otomatis lagu terkait saat antrean habis\n"+
 			"• `%sremove <nomor>` (`%srm`, `%sdel`) — Hapus 1 lagu tertentu dari antrean\n"+
 			"• `%sclear` (`%sdc`, `%sleave`) — Hapus seluruh antrean & keluar dari voice channel\n"+
 			"• `%sping` — Cek status respons bot",
-		p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p,
+		p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p,
 	)
 
 	embed := &discordgo.MessageEmbed{

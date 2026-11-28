@@ -12,12 +12,12 @@ Bot musik Discord berbasis Go dengan arsitektur modular, *thread-safe*, hemat CP
   - Play langsung dari kata kunci (*keyword*) maupun URL (musik tunggal / playlist / album)
   - Pencarian interaktif (`!search`) dengan **SelectMenu Dropdown** untuk memilih lagu
   - Sistem Queue otomatis (mendukung append playlist secara instan)
-  - Pause / Resume, Skip / Next, Shuffle (acak antrean), Repeat (`Off`, `All`, `1`)
+  - Pause / Resume, Skip / Next, Shuffle (acak antrean), Repeat (`Off`, `All`, `1`), Autoplay (putar otomatis lagu terkait saat antrean habis)
   - Clear seluruh antrean atau hapus 1 lagu tertentu (`!remove <nomor>`)
 - **Navigasi Player Interaktif**:
-  - 5 tombol navigasi (`Play/Pause`, `Next`, `Shuffle`, `Repeat`, `Clear`) yang selalu menempel secara otomatis pada **pesan terakhir bot**.
+  - Tombol navigasi (`Play/Pause`, `Next`, `Shuffle`, `Repeat`, `Clear`, dan `Autoplay`) yang selalu menempel secara otomatis pada **pesan terakhir bot**.
 - **Otomasi & Proteksi Voice Channel**:
-  - Otomatis *join* ke voice channel saat `play` dan otomatis *leave* ketika antrean habis, di-clear, atau ketika **voice channel kosong (hanya tersisa bot)**.
+  - Otomatis *join* ke voice channel saat `play` dan otomatis *leave* ketika antrean habis (jika Autoplay nonaktif), di-clear, atau ketika **voice channel kosong (hanya tersisa bot)**.
   - Proteksi akses command: User wajib berada di voice channel yang sama dengan bot.
   - Mendukung penuh command dari **Text Channel** biasa maupun **Voice Channel Chat (Open-Chat)**.
 
@@ -51,6 +51,7 @@ DEBUG=false
 
 # Opsional:
 BUFFER_SECONDS=30
+AUTOPLAY=false
 YT_APIKEY=
 COOKIE_FILE=cookies.txt
 PROXY=
@@ -68,6 +69,7 @@ PROXY=
 | `!queue` | `!q` | Tampilkan daftar antrean musik, status repeat, dan durasi |
 | `!shuffle` | `!sh`, `!acak` | Acak urutan lagu berikutnya di dalam antrean |
 | `!repeat [off\|all\|1]` | `!loop`, `!rp` | Ubah mode repeat (`Off`, `All`, `1`) |
+| `!autoplay [on\|off]` | `!ap`, `!auto` | Aktifkan/matikan pemutaran otomatis lagu terkait saat antrean habis |
 | `!remove <nomor>` | `!rm`, `!del` | Hapus 1 lagu tertentu dari antrean berdasarkan nomor urut |
 | `!clear` | `!dc`, `!leave`, `!stop` | Kosongkan seluruh antrean, hentikan musik, dan keluar dari voice channel |
 | `!help` | `!h` | Tampilkan panduan seluruh perintah bot |

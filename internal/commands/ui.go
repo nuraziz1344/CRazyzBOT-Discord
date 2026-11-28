@@ -15,18 +15,20 @@ const (
 	BtnShuffle     = "player:shuffle"
 	BtnRepeat      = "player:repeat"
 	BtnClear       = "player:clear"
+	BtnAutoplay    = "player:autoplay"
 	SelectSearch   = "search:select"
 )
 
-// BuildPlayerComponents creates the 5 navigation buttons in a single ActionsRow.
+// BuildPlayerComponents creates the navigation buttons across two ActionsRows.
 func BuildPlayerComponents(gp *player.GuildPlayer) []discordgo.MessageComponent {
 	if gp == nil || !gp.IsRunning() || gp.Queue.Len() == 0 {
 		return []discordgo.MessageComponent{}
 	}
 
-	paused := gp.IsPaused()
-	repeatMode := gp.Queue.Repeat()
+	return buildPlayerComponents(gp.IsPaused(), gp.Queue.Repeat(), gp.Queue.Autoplay())
+}
 
+func buildPlayerComponents(paused bool, repeatMode player.RepeatMode, autoplay bool) []discordgo.MessageComponent {
 	pauseLabel := "Pause"
 	pauseEmoji := "⏸️"
 	pauseStyle := discordgo.PrimaryButton
@@ -39,6 +41,11 @@ func BuildPlayerComponents(gp *player.GuildPlayer) []discordgo.MessageComponent 
 	repeatStyle := discordgo.SecondaryButton
 	if repeatMode != player.RepeatOff {
 		repeatStyle = discordgo.PrimaryButton
+	}
+
+	autoplayStyle := discordgo.SecondaryButton
+	if autoplay {
+		autoplayStyle = discordgo.SuccessButton
 	}
 
 	return []discordgo.MessageComponent{
@@ -76,6 +83,16 @@ func BuildPlayerComponents(gp *player.GuildPlayer) []discordgo.MessageComponent 
 				},
 			},
 		},
+		discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.Button{
+					CustomID: BtnAutoplay,
+					Label:    fmt.Sprintf("Autoplay: %s", player.FormatAutoplay(autoplay)),
+					Style:    autoplayStyle,
+					Emoji:    &discordgo.ComponentEmoji{Name: "📻"},
+				},
+			},
+		},
 	}
 }
 
@@ -86,6 +103,7 @@ func BuildNowPlayingEmbed(gp *player.GuildPlayer, statusNotice string) *discordg
 	}
 
 	tracks, repeatMode := gp.Queue.Snapshot()
+	autoplay := gp.Queue.Autoplay()
 	if len(tracks) == 0 {
 		return &discordgo.MessageEmbed{
 			Title:       "⏹️ Pemutaran Berhenti",
@@ -135,13 +153,24 @@ func BuildNowPlayingEmbed(gp *player.GuildPlayer, statusNotice string) *discordg
 			Inline: true,
 		},
 		{
+			Name:   "Autoplay",
+			Value:  player.FormatAutoplay(autoplay),
+			Inline: true,
+		},
+		{
 			Name:   "Total Queue",
 			Value:  fmt.Sprintf("%d lagu", len(tracks)),
 			Inline: true,
 		},
 	}
 
-	if current.RequestedBy != "" {
+	if current.Autoplay {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "Diminta Oleh",
+			Value:  "📻 Autoplay",
+			Inline: true,
+		})
+	} else if current.RequestedBy != "" {
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:   "Diminta Oleh",
 			Value:  fmt.Sprintf("<@%s>", current.RequestedBy),
@@ -311,7 +340,7 @@ func HandlePlayerStateChange(s *discordgo.Session, gp *player.GuildPlayer, event
 }
 
 // FormatTrackList formats a slice of tracks for queue display.
-func FormatTrackList(tracks []*music.Track, repeatMode player.RepeatMode, isPaused bool) string {
+func FormatTrackList(tracks []*music.Track, repeatMode player.RepeatMode, autoplay bool, isPaused bool) string {
 	if len(tracks) == 0 {
 		return "Antrean kosong."
 	}
@@ -322,19 +351,23 @@ func FormatTrackList(tracks []*music.Track, repeatMode player.RepeatMode, isPaus
 		stateLabel = "Paused"
 	}
 
-	sb.WriteString(fmt.Sprintf("**Repeat:** `%s` | **Total:** `%d lagu`\n\n", repeatMode.String(), len(tracks)))
+	sb.WriteString(fmt.Sprintf("**Repeat:** `%s` | **Autoplay:** `%s` | **Total:** `%d lagu`\n\n", repeatMode.String(), player.FormatAutoplay(autoplay), len(tracks)))
 	maxDisplay := 20
 	for i, t := range tracks {
 		if i >= maxDisplay {
 			sb.WriteString(fmt.Sprintf("\n*...dan %d lagu lainnya*", len(tracks)-maxDisplay))
 			break
 		}
+		badge := t.SourceBadge()
+		if t.Autoplay {
+			badge += " 📻"
+		}
 		if i == 0 {
 			sb.WriteString(fmt.Sprintf("`%d.` 🎵 **%s** %s `(%s)` — *(%s)*\n",
-				i+1, t.DisplayTitle(), t.SourceBadge(), t.FormattedDuration(), stateLabel))
+				i+1, t.DisplayTitle(), badge, t.FormattedDuration(), stateLabel))
 		} else {
 			sb.WriteString(fmt.Sprintf("`%d.` %s %s `(%s)`\n",
-				i+1, t.DisplayTitle(), t.SourceBadge(), t.FormattedDuration()))
+				i+1, t.DisplayTitle(), badge, t.FormattedDuration()))
 		}
 	}
 	return sb.String()

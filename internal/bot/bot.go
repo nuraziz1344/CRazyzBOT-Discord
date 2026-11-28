@@ -42,6 +42,7 @@ func New(cfg *config.Config) (*Bot, error) {
 	provider.Configure(cfg.Debug, cfg.CookieFile, cfg.Proxy)
 	player.Debug = cfg.Debug
 	player.SetBufferSeconds(cfg.BufferSeconds)
+	player.DefaultAutoplay = cfg.Autoplay
 	player.OnPlayerStateChange = commands.HandlePlayerStateChange
 
 	session.AddHandler(b.messageHandler)
